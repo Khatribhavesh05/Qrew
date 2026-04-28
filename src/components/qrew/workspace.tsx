@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, LogOut, Copy, Check } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
 import { supabase } from "@/lib/supabase";
 import type { Company, Employee } from "@/types";
 
@@ -49,67 +51,97 @@ const EMPLOYEE_META: Record<Employee["role"], EmployeeMeta> = {
   },
 };
 
-const MOCK_RESPONSES: Record<Employee["role"], string> = {
-  research: `Here's what I found based on your query:
 
-**Market Overview**
-The market shows strong growth signals with 23% YoY expansion. Three dominant players occupy ~60% share, leaving significant white space in the mid-market.
+// ─── Markdown components ─────────────────────────────────────────────────────
+// Styled for dark bubble backgrounds (#161616). Uses inline styles to keep
+// colours consistent with the Qrew design system regardless of global CSS.
 
-**Key Insights**
-• Customer acquisition costs are rising 15% annually for incumbents
-• NPS scores in the category average 34 — well below the 50+ threshold for strong retention
-• No competitor has cracked the SMB segment below $2K ARR
-
-**Opportunity**
-Target the underserved mid-market. Lead with ease of use, price competitively at $49/mo to outflank enterprise-first players.
-
-**Recommended Next Step**
-Run 10 discovery calls with potential users in the mid-market segment to validate the positioning.`,
-
-  strategy: `Based on your context, here's the 90-day roadmap:
-
-**Phase 1 — Validate (Days 1–30)**
-→ Sign 10 design partners from your existing network
-→ Run weekly 30-min feedback calls
-→ Identify the single highest-value use case
-
-**Phase 2 — Build (Days 31–60)**
-→ Ship a focused MVP around the winning use case
-→ Set up lightweight onboarding (Loom walkthrough + docs)
-→ Establish $49/mo pricing with an annual plan option
-
-**Phase 3 — Launch (Days 61–90)**
-→ Product Hunt launch with design partners seeding reviews
-→ Write 3 SEO posts targeting high-intent keywords
-→ Activate 2 partnership channels for distribution
-
-**Success Metrics**
-- 10 paying customers by day 60
-- 40% week-1 retention by day 90
-- $2K MRR at launch`,
-
-  launch: `Here's your launch copy across all channels:
-
-**Product Hunt Tagline**
-Your AI founding team — Research, Strategy, and Launch in one OS.
-
-**Product Hunt Description**
-Solo founders compete against entire teams. Qrew gives you three AI employees that share company context, collaborate, and produce real output. Not just chat — actual deliverables.
-
-**Tweet Thread**
-1/ Just launched Qrew — an OS for solo founders with actual AI employees (not just chatbots).
-
-Research. Strategy. Launch. They share context, collaborate, and ship real work. 🧵
-
-2/ The problem: solo founders need a researcher, a strategist, and a marketer all at once. That's impossible alone.
-
-3/ So we built three AI employees that work together as your founding team. Same company context. Different specialties.
-
-**Cold Email Subject Line**
-You're competing against teams. This evens the odds.
-
-**Reddit Post Title**
-I built an AI founding team for solo founders — here's what I learned after 6 months`,
+const MD: Components = {
+  h1: ({ children }) => (
+    <h1 className="mb-2 mt-3 text-[0.95rem] font-bold first:mt-0 last:mb-0" style={{ color: "#F5F5F5" }}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="mb-1.5 mt-2.5 text-[0.875rem] font-semibold first:mt-0 last:mb-0" style={{ color: "#F5F5F5" }}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="mb-1 mt-2 text-sm font-semibold first:mt-0 last:mb-0" style={{ color: "#EFEFEF" }}>
+      {children}
+    </h3>
+  ),
+  p: ({ children }) => (
+    <p className="mb-2 leading-relaxed last:mb-0">{children}</p>
+  ),
+  strong: ({ children }) => (
+    <strong style={{ color: "#F5F5F5", fontWeight: 600 }}>{children}</strong>
+  ),
+  em: ({ children }) => (
+    <em style={{ color: "#C0C0C0" }}>{children}</em>
+  ),
+  ul: ({ children }) => (
+    <ul className="mb-2 list-disc space-y-0.5 pl-4 last:mb-0">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="mb-2 list-decimal space-y-0.5 pl-4 last:mb-0">{children}</ol>
+  ),
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  blockquote: ({ children }) => (
+    <blockquote
+      className="my-2 border-l-2 pl-3 first:mt-0 last:mb-0"
+      style={{ borderColor: "#6366F1", color: "#A3A3A3" }}
+    >
+      {children}
+    </blockquote>
+  ),
+  hr: () => (
+    <hr className="my-3 last:mb-0" style={{ border: "none", borderTop: "1px solid #1F1F1F" }} />
+  ),
+  pre: ({ children }) => (
+    <pre
+      className="my-2 overflow-x-auto rounded-lg p-3 text-[0.78rem] first:mt-0 last:mb-0"
+      style={{ background: "#0D0D0D", border: "1px solid #1F1F1F" }}
+    >
+      {children}
+    </pre>
+  ),
+  code: ({ className, children }) => {
+    const isBlock = Boolean(className);
+    return isBlock ? (
+      <code
+        className={className}
+        style={{ fontFamily: "var(--font-geist-mono), monospace", color: "#A3A3A3" }}
+      >
+        {children}
+      </code>
+    ) : (
+      <code
+        style={{
+          background: "#1A1A1A",
+          border: "1px solid #2A2A2A",
+          borderRadius: "4px",
+          padding: "1px 4px",
+          fontFamily: "var(--font-geist-mono), monospace",
+          fontSize: "0.85em",
+          color: "#C0C0C0",
+        }}
+      >
+        {children}
+      </code>
+    );
+  },
+  a: ({ href, children }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ color: "#6366F1", textDecoration: "underline" }}
+    >
+      {children}
+    </a>
+  ),
 };
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────
@@ -151,10 +183,11 @@ export function Workspace({
   >({});
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [copiedOutput, setCopiedOutput] = useState(false);
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const streamIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const loadedEmployeesRef = useRef<Set<string>>(new Set());
 
   const activeEmployee = employees.find((e) => e.id === activeEmployeeId);
@@ -210,9 +243,12 @@ export function Workspace({
     }
   }, [streamingText, isStreaming]);
 
-  // Reset loading state when switching employees
+  // Reset loading state when switching employees; cancel any in-flight request
   const handleEmployeeSelect = (id: string) => {
     if (id === activeEmployeeId) return;
+    abortControllerRef.current?.abort();
+    setIsStreaming(false);
+    setStreamingText("");
     setActiveEmployeeId(id);
     if (!loadedEmployeesRef.current.has(id)) {
       setLoadingMessages(true);
@@ -246,51 +282,89 @@ export function Workspace({
       content,
     });
 
-    // Start streaming after a brief thinking delay
+    // Abort any prior request and start streaming
+    abortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     setIsStreaming(true);
     setStreamingText("");
+    inputRef.current?.focus();
 
-    if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: abortController.signal,
+        body: JSON.stringify({
+          message: content,
+          employeeRole: activeEmployee.role,
+          companyName: company.name,
+          companyDescription: company.description,
+          // Send last 20 messages as context
+          conversationHistory: activeMessages.slice(-20).map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
+      });
 
-    setTimeout(() => {
-      const full = MOCK_RESPONSES[activeEmployee.role];
-      let i = 0;
+      if (!response.ok) {
+        throw new Error(`Chat request failed (${response.status})`);
+      }
+      if (!response.body) throw new Error("No response body");
 
-      streamIntervalRef.current = setInterval(() => {
-        i += 3;
-        setStreamingText(full.slice(0, i));
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
 
-        if (i >= full.length) {
-          clearInterval(streamIntervalRef.current!);
-          streamIntervalRef.current = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+        setStreamingText(fullText);
+      }
 
-          const assistantMsg: LocalMessage = {
+      const assistantMsg: LocalMessage = {
+        id: crypto.randomUUID(),
+        employeeId: activeEmployeeId,
+        role: "assistant",
+        content: fullText,
+      };
+
+      setMessages((prev) => [...prev, assistantMsg]);
+      setOutputByEmployee((prev) => ({
+        ...prev,
+        [activeEmployeeId]: fullText,
+      }));
+      setStreamingText("");
+      setIsStreaming(false);
+
+      // Persist assistant message (fire and forget)
+      supabase.from("messages").insert({
+        employee_id: activeEmployeeId,
+        company_id: company.id,
+        role: "assistant" as const,
+        content: fullText,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        // Navigation away — clean up silently
+      } else {
+        const errMsg = err instanceof Error ? err.message : "Something went wrong";
+        setMessages((prev) => [
+          ...prev,
+          {
             id: crypto.randomUUID(),
             employeeId: activeEmployeeId,
             role: "assistant",
-            content: full,
-          };
-
-          setMessages((prev) => [...prev, assistantMsg]);
-          setOutputByEmployee((prev) => ({
-            ...prev,
-            [activeEmployeeId]: full,
-          }));
-          setStreamingText("");
-          setIsStreaming(false);
-
-          // Persist assistant message
-          supabase.from("messages").insert({
-            employee_id: activeEmployeeId,
-            company_id: company.id,
-            role: "assistant" as const,
-            content: full,
-          });
-        }
-      }, 18);
-    }, 750);
-
-    inputRef.current?.focus();
+            content: `Sorry, I ran into an error: ${errMsg}`,
+          },
+        ]);
+      }
+      setStreamingText("");
+      setIsStreaming(false);
+    }
   }, [input, isStreaming, activeEmployee, activeEmployeeId, company.id]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -312,10 +386,16 @@ export function Workspace({
     setTimeout(() => setCopiedOutput(false), 2000);
   };
 
-  // Cleanup interval on unmount
+  const handleCopyMessage = async (id: string, content: string) => {
+    await navigator.clipboard.writeText(content);
+    setCopiedMsgId(id);
+    setTimeout(() => setCopiedMsgId(null), 2000);
+  };
+
+  // Abort any in-flight request on unmount
   useEffect(() => {
     return () => {
-      if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
+      abortControllerRef.current?.abort();
     };
   }, []);
 
@@ -335,7 +415,11 @@ export function Workspace({
         <div className="px-5 pb-4 pt-6">
           <span
             className="text-xl font-bold"
-            style={{ color: "#6366F1", letterSpacing: "-0.04em" }}
+            style={{
+              color: "var(--qrew-indigo)",
+              letterSpacing: "-0.04em",
+              textShadow: "0 0 20px rgba(99, 102, 241, 0.5)",
+            }}
           >
             qrew
           </span>
@@ -540,23 +624,70 @@ export function Workspace({
                       </span>
                     )}
                     <div
-                      className="max-w-[70%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
-                      style={
-                        msg.role === "user"
-                          ? {
-                              background: "#6366F1",
-                              color: "#F5F5F5",
-                              borderBottomRightRadius: "4px",
-                            }
-                          : {
-                              background: "#161616",
-                              border: "1px solid #1F1F1F",
-                              color: "#E5E5E5",
-                              borderBottomLeftRadius: "4px",
-                            }
-                      }
+                      className={`flex max-w-[70%] flex-col gap-1 ${
+                        msg.role === "user" ? "items-end" : "items-start"
+                      }`}
                     >
-                      {msg.content}
+                      <div
+                        className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                          msg.role === "user"
+                            ? "whitespace-pre-wrap"
+                            : "min-w-0"
+                        }`}
+                        style={
+                          msg.role === "user"
+                            ? {
+                                background: "#6366F1",
+                                color: "#F5F5F5",
+                                borderBottomRightRadius: "4px",
+                              }
+                            : {
+                                background: "#161616",
+                                border: "1px solid #1F1F1F",
+                                color: "#E5E5E5",
+                                borderBottomLeftRadius: "4px",
+                              }
+                        }
+                      >
+                        {msg.role === "user" ? (
+                          msg.content
+                        ) : (
+                          <ReactMarkdown components={MD}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        )}
+                      </div>
+
+                      {/* Copy button — assistant messages only */}
+                      {msg.role === "assistant" && (
+                        <button
+                          onClick={() =>
+                            handleCopyMessage(msg.id, msg.content)
+                          }
+                          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors duration-150"
+                          style={{
+                            color:
+                              copiedMsgId === msg.id ? "#10B981" : "#525252",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (copiedMsgId !== msg.id)
+                              e.currentTarget.style.color = "#A3A3A3";
+                          }}
+                          onMouseLeave={(e) => {
+                            if (copiedMsgId !== msg.id)
+                              e.currentTarget.style.color = "#525252";
+                          }}
+                        >
+                          {copiedMsgId === msg.id ? (
+                            <Check size={11} />
+                          ) : (
+                            <Copy size={11} />
+                          )}
+                          <span>
+                            {copiedMsgId === msg.id ? "Copied!" : "Copy"}
+                          </span>
+                        </button>
+                      )}
                     </div>
                   </motion.div>
                 ))}
@@ -745,14 +876,14 @@ export function Workspace({
                   </span>
                 </div>
                 <div
-                  className="rounded-xl border p-4 text-xs leading-relaxed whitespace-pre-wrap"
+                  className="rounded-xl border p-4 text-xs leading-relaxed"
                   style={{
                     background: "#0D0D0D",
                     borderColor: "#1F1F1F",
                     color: "#A3A3A3",
                   }}
                 >
-                  {activeOutput}
+                  <ReactMarkdown components={MD}>{activeOutput}</ReactMarkdown>
                 </div>
               </motion.div>
             )}
