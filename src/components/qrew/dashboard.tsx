@@ -121,6 +121,7 @@ export function Dashboard({ startups, userEmail }: DashboardProps) {
     const stored = sessionStorage.getItem("qrew_pending_idea");
     if (stored) {
       sessionStorage.removeItem("qrew_pending_idea");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPendingIdea(stored);
       setShowModal(true);
     }

@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await request.json()) as RequestBody;
-  let { idea, startupId } = body;
+  const { startupId } = body;
+  let { idea } = body;
 
   // If only startupId given, fetch idea from DB
   if (!idea?.trim() && startupId) {

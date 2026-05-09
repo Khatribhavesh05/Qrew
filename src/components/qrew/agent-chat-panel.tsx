@@ -49,6 +49,7 @@ export function AgentChatPanel({ open, agent, startupId, onClose }: AgentChatPan
 
   // Reset on agent switch
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages([{ role: "assistant", content: AGENT_META[agent].greeting }]);
     setInput("");
     setLoading(false);

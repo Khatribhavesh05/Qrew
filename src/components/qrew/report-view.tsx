@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, CheckCircle, FileText, Zap, BarChart3, ArrowRight, Info, MessageSquare } from "lucide-react";
 import { MCQPopup } from "./mcq-popup";
@@ -44,6 +45,50 @@ export function ReportView({ startup }: ReportViewProps) {
   const generationStartedRef = useRef(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
+  // ── Step 2: Start SSE generation ───────────────────────────────────────────
+  const startGeneration = () => {
+    if (generationStartedRef.current) return;
+    generationStartedRef.current = true;
+    setPhase("generating");
+
+    const es = new EventSource(`/api/startups/${startup.id}/generate`);
+    eventSourceRef.current = es;
+
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data as string) as {
+          type: string;
+          agent?: string;
+          state?: AgentState;
+          content?: string;
+          message?: string;
+        };
+
+        if (data.type === "status" && data.agent) {
+          setAgentStatus((prev) => ({ ...prev, [data.agent!]: data.state ?? "waiting" }));
+        }
+        if (data.type === "report" && data.agent && data.content) {
+          const key = data.agent === "alex" ? "research" : "strategy";
+          setReports((prev) => ({ ...prev, [key]: data.content }));
+        }
+        if (data.type === "complete") {
+          setPhase("done");
+          setAgentStatus({ alex: "done", sam: "done" });
+          es.close();
+        }
+        if (data.type === "error") {
+          setError(data.message ?? "Generation failed");
+          es.close();
+        }
+      } catch { /* ignore parse errors */ }
+    };
+
+    es.onerror = () => {
+      setError("Connection lost. Please refresh.");
+      es.close();
+    };
+  };
+
   // ── Step 1: Load MCQs ONCE on mount ────────────────────────────────────────
   useEffect(() => {
     if (mcqsLoadedRef.current) return;
@@ -65,7 +110,9 @@ export function ReportView({ startup }: ReportViewProps) {
     // still skip generation and show empty state rather than burn credits
     if (startup.status === "report_ready" || startup.status === "live") {
       console.warn("[ReportView] Status is done but report_data is empty — skipping generation");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAgentStatus({ alex: "done", sam: "done" });
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPhase("done");
       return;
     }
@@ -129,50 +176,6 @@ export function ReportView({ startup }: ReportViewProps) {
   }, []); // intentionally empty — run once on mount only
 
 
-  // ── Step 2: Start SSE generation ───────────────────────────────────────────
-  const startGeneration = () => {
-    if (generationStartedRef.current) return;
-    generationStartedRef.current = true;
-    setPhase("generating");
-
-    const es = new EventSource(`/api/startups/${startup.id}/generate`);
-    eventSourceRef.current = es;
-
-    es.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data as string) as {
-          type: string;
-          agent?: string;
-          state?: AgentState;
-          content?: string;
-          message?: string;
-        };
-
-        if (data.type === "status" && data.agent) {
-          setAgentStatus((prev) => ({ ...prev, [data.agent!]: data.state ?? "waiting" }));
-        }
-        if (data.type === "report" && data.agent && data.content) {
-          const key = data.agent === "alex" ? "research" : "strategy";
-          setReports((prev) => ({ ...prev, [key]: data.content }));
-        }
-        if (data.type === "complete") {
-          setPhase("done");
-          setAgentStatus({ alex: "done", sam: "done" });
-          es.close();
-        }
-        if (data.type === "error") {
-          setError(data.message ?? "Generation failed");
-          es.close();
-        }
-      } catch { /* ignore parse errors */ }
-    };
-
-    es.onerror = () => {
-      setError("Connection lost. Please refresh.");
-      es.close();
-    };
-  };
-
   // ── MCQ handlers ────────────────────────────────────────────────────────────
   const handleMCQAnswered = (field: string, value: string) => {
     setAnsweredCount((c) => c + 1);
@@ -199,7 +202,6 @@ export function ReportView({ startup }: ReportViewProps) {
   const isGenerating = phase === "generating";
   const isDone = phase === "done";
   const currentMCQ = phase === "mcqs" ? mcqs[mcqIndex] ?? null : null;
-  const bothDone = agentStatus.alex === "done" && agentStatus.sam === "done";
 
   const openChat = (agent: "alex" | "sam") => {
     setChatPanel({ open: true, agent });
@@ -224,7 +226,7 @@ export function ReportView({ startup }: ReportViewProps) {
         <span className="text-lg font-bold" style={{ color: "#6366F1", letterSpacing: "-0.04em" }}>qrew</span>
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium" style={{ color: "#F5F5F5" }}>{startup.name}</span>
-          <a href="/app" className="text-xs" style={{ color: "#525252" }}>Dashboard →</a>
+          <Link href="/app" className="text-xs" style={{ color: "#525252" }}>Dashboard →</Link>
         </div>
       </nav>
 

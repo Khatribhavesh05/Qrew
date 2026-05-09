@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Loader2, CheckCircle2, AlertCircle, Globe, GitBranch,
+  Loader2, AlertCircle, Globe, GitBranch,
   ExternalLink, LayoutDashboard, Rocket, FileCode2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -72,6 +73,7 @@ export default function StartupPage() {
   }, [startupId, router]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchData().then((s) => {
       if (!s) return;
 
@@ -290,7 +292,7 @@ function BuildingScreen({
         </motion.div>
 
         <div className="text-center mt-4">
-          <a href="/app" className="text-xs" style={{ color: "#525252" }}>← Dashboard</a>
+          <Link href="/app" className="text-xs" style={{ color: "#525252" }}>← Dashboard</Link>
         </div>
       </div>
     </div>
@@ -408,7 +410,7 @@ function BuiltScreen({
         </motion.div>
 
         <div className="text-center mt-4">
-          <a href="/app" className="text-xs" style={{ color: "#525252" }}>← Dashboard</a>
+          <Link href="/app" className="text-xs" style={{ color: "#525252" }}>← Dashboard</Link>
         </div>
       </div>
     </div>
@@ -492,7 +494,7 @@ function DeployedScreen({ startup }: { startup: Startup }) {
             </a>
           )}
 
-          <a
+          <Link
             href="/app"
             className="flex items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm transition-all"
             style={{ borderColor: "#1F1F1F", color: "#525252" }}
@@ -501,7 +503,7 @@ function DeployedScreen({ startup }: { startup: Startup }) {
           >
             <LayoutDashboard size={14} />
             Back to Dashboard
-          </a>
+          </Link>
         </motion.div>
       </div>
     </div>
@@ -527,9 +529,9 @@ function ErrorScreen({ startupId, onRetry }: { startupId: string; onRetry: () =>
           >
             Retry
           </button>
-          <a href="/app" className="rounded-xl border px-4 py-2.5 text-sm" style={{ borderColor: "#1F1F1F", color: "#A3A3A3" }}>
+          <Link href="/app" className="rounded-xl border px-4 py-2.5 text-sm" style={{ borderColor: "#1F1F1F", color: "#A3A3A3" }}>
             Dashboard
-          </a>
+          </Link>
         </div>
       </div>
       <p className="text-xs" style={{ color: "#333" }}>ID: {startupId}</p>

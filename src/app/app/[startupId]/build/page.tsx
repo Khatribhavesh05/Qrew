@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2,
@@ -320,7 +321,7 @@ export default function BuildPage() {
   const doneCount = Object.values(state.steps).filter(s => s === "done").length;
   const progress = (doneCount / GEN_STEPS.length) * 100;
   const isGenerating = state.phase === "generating";
-  const isStopped = state.phase === "cancelled";
+  const _isStopped = state.phase === "cancelled";
 
   // Final delivery screen
   if (state.phase === "live") {
@@ -555,7 +556,7 @@ function StepCard({
   const isWaiting = status === "waiting";
   const hasCode = code.length > 0;
 
-  const statusColor = isDone ? "#10B981" : isRunning ? primaryColor : "#333333";
+  const _statusColor = isDone ? "#10B981" : isRunning ? primaryColor : "#333333";
   const cardBg = isDone ? `${step.agentColor}06` : isRunning ? "#111111" : "#0D0D0D";
   const cardBorder = isDone ? `${step.agentColor}20` : isRunning ? `${primaryColor}25` : "#1A1A1A";
 
@@ -898,14 +899,14 @@ function DeliveryScreen({
               <ExternalLink size={12} style={{ color: "#525252" }} />
             </a>
           )}
-          <a
+          <Link
             href="/app"
             className="flex items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm"
             style={{ borderColor: "#1F1F1F", color: "#A3A3A3" }}
           >
             <LayoutDashboard size={14} />
             Go to Dashboard
-          </a>
+          </Link>
         </motion.div>
 
         {!liveUrl && !githubUrl && (

@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { v0 } from "v0-sdk";
 
 export interface GeneratedFile {
   path: string;
@@ -19,93 +20,34 @@ export interface CodeGenBrain {
   brand_vibe: string;
 }
 
-const V0_ENDPOINT = "https://v0.dev/chat/api/stream";
-
-async function callV0Stream(
+async function callV0(
   prompt: string,
   onChunk?: (chunk: string) => void
 ): Promise<string> {
-  const apiKey = process.env.V0_API_KEY;
+  console.log("[v0 SDK] Creating chat — prompt length:", prompt.length);
 
-  const requestHeaders = {
-    "Authorization": `Bearer ${apiKey ?? ""}`,
-    "Content-Type": "application/json",
-  };
+  const chat = await v0.chats.create({ message: prompt });
 
-  console.log("[v0 API] Calling: POST", V0_ENDPOINT);
-  console.log("[v0 API] Key prefix:", apiKey?.slice(0, 12) ?? "NOT SET");
-  console.log("[v0 API] Headers being sent:", {
-    ...requestHeaders,
-    Authorization: `Bearer ${apiKey?.slice(0, 12) ?? "NOT SET"}...`,
-  });
+  console.log("[v0 SDK] Chat created:", chat.id);
+  console.log("[v0 SDK] Latest version status:", chat.latestVersion?.status);
+  console.log("[v0 SDK] Files generated:", chat.latestVersion?.files?.length ?? 0);
 
-  const response = await fetch(V0_ENDPOINT, {
-    method: "POST",
-    headers: requestHeaders,
-    body: JSON.stringify({ messages: [{ role: "user", content: prompt }] }),
-  });
+  // Prefer the main page file, then any TSX/JSX, then fall back to text
+  const files = chat.latestVersion?.files ?? [];
+  const codeFile =
+    files.find((f) => f.name === "app/page.tsx" || f.name === "page.tsx") ??
+    files.find((f) => f.name.endsWith(".tsx") || f.name.endsWith(".jsx")) ??
+    files.find((f) => f.name.endsWith(".ts") || f.name.endsWith(".js")) ??
+    files[0];
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    console.error("[v0 API] FAILED:", {
-      status: response.status,
-      statusText: response.statusText,
-      body: errorBody,
-      responseHeaders: Object.fromEntries(response.headers.entries()),
-    });
-    throw new Error(`v0 API failed (HTTP ${response.status}): ${errorBody}`);
-  }
+  const code = codeFile?.content ?? chat.text ?? "";
 
-  console.log("[v0 API] Response OK — status:", response.status);
-  console.log("[v0 API] Response headers:", Object.fromEntries(response.headers.entries()));
+  console.log("[v0 SDK] Extracted from file:", codeFile?.name ?? "(text field)");
+  console.log("[v0 SDK] Code length:", code.length, "chars");
 
-  // Read the SSE stream
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("v0 API: no response body");
+  if (code) onChunk?.(code);
 
-  const decoder = new TextDecoder();
-  let fullText = "";
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    const rawChunk = decoder.decode(value, { stream: true });
-    console.log("[v0 API] Raw chunk:", rawChunk);
-    buffer += rawChunk;
-
-    // Parse SSE lines
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      if (!line.startsWith("data:")) continue;
-      const data = line.slice(5).trim();
-      if (data === "[DONE]") continue;
-
-      try {
-        const parsed = JSON.parse(data) as Record<string, unknown>;
-        // Handle both OpenAI-style delta and plain text formats
-        const delta = (parsed as { choices?: Array<{ delta?: { content?: string } }> }).choices?.[0]?.delta?.content;
-        const textField = (parsed as { text?: string }).text;
-        const text = delta ?? textField ?? "";
-        if (text) {
-          fullText += text;
-          onChunk?.(text);
-        }
-      } catch {
-        // Not JSON — might be plain text chunk
-        if (data) {
-          fullText += data;
-          onChunk?.(data);
-        }
-      }
-    }
-  }
-
-  console.log("[v0 API] Stream complete — received", fullText.length, "chars");
-  return fullText;
+  return code;
 }
 
 export async function generateLandingPage(
@@ -154,19 +96,25 @@ ANTI-SLOP RULES — VIOLATING THESE WILL FAIL:
 
 Return ONLY the complete TypeScript React component code. No explanation. No markdown fences. Start directly with "use client";`;
 
-  const fullCode = await callV0Stream(prompt, onChunk);
+  const fullCode = await callV0(prompt, onChunk);
   return fullCode || `"use client";\nexport default function Page() { return <main style={{background:"#0A0A0A",color:"#F5F5F5",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><h1>${brain.startup_name}</h1></main>; }`;
 }
 
 // Smoke-test: run with `npx ts-node -e "require('./src/lib/code-generator').testV0()"`
 export async function testV0(): Promise<void> {
-  console.log("=== v0 API SMOKE TEST ===");
+  console.log("=== v0 SDK SMOKE TEST ===");
   try {
-    const result = await callV0Stream(
-      "Create a simple React button component with Tailwind CSS"
-    );
-    console.log("=== FULL RESPONSE ===");
-    console.log(result);
+    const chat = await v0.chats.create({
+      message:
+        "Create a hero section for a fitness app called MomFit with indigo colors and Framer Motion animations",
+    });
+
+    const messages = await v0.chats.findMessages({ chatId: chat.id });
+
+    console.log("=== FULL CHAT RESPONSE ===");
+    console.log(JSON.stringify(chat, null, 2));
+    console.log("=== MESSAGES ===");
+    console.log(JSON.stringify(messages, null, 2));
     console.log("=== END ===");
   } catch (err) {
     console.error("=== TEST FAILED ===");
