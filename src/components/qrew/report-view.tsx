@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, CheckCircle, FileText, Zap, BarChart3, ArrowRight, Info } from "lucide-react";
+import { Loader2, CheckCircle, FileText, Zap, BarChart3, ArrowRight, Info, MessageSquare } from "lucide-react";
 import { MCQPopup } from "./mcq-popup";
 import { ReportPanel } from "./report-panel";
+import { AgentChatPanel } from "./agent-chat-panel";
 import type { MCQ } from "@/app/api/startups/[startupId]/mcqs/route";
 import type { Startup } from "@/types";
 
@@ -32,6 +33,9 @@ export function ReportView({ startup }: ReportViewProps) {
   const [answeredCount, setAnsweredCount] = useState(0);
   const [panel, setPanel] = useState<{ open: boolean; type: "research" | "strategy" }>({
     open: false, type: "research",
+  });
+  const [chatPanel, setChatPanel] = useState<{ open: boolean; agent: "alex" | "sam" }>({
+    open: false, agent: "alex",
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -197,8 +201,18 @@ export function ReportView({ startup }: ReportViewProps) {
   const currentMCQ = phase === "mcqs" ? mcqs[mcqIndex] ?? null : null;
   const bothDone = agentStatus.alex === "done" && agentStatus.sam === "done";
 
+  const openChat = (agent: "alex" | "sam") => {
+    setChatPanel({ open: true, agent });
+  };
+
   return (
-    <div className="w-full min-h-screen flex flex-col" style={{ background: "#0A0A0A", color: "#F5F5F5" }}>
+    <>
+    <motion.div
+      animate={{ marginLeft: chatPanel.open ? 380 : 0 }}
+      transition={{ type: "spring", stiffness: 300, damping: 35 }}
+      className="min-h-screen flex flex-col"
+      style={{ background: "#0A0A0A", color: "#F5F5F5" }}
+    >
       {/* Ambient */}
       <div
         className="pointer-events-none fixed inset-0"
@@ -271,8 +285,16 @@ export function ReportView({ startup }: ReportViewProps) {
         {/* ── Phase: Generating — agent status cards ── */}
         {(isGenerating || isDone) && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-3">
-            <AgentCard emoji="🔍" name="Alex" role="Research" state={agentStatus.alex} color="#6366F1" />
-            <AgentCard emoji="📊" name="Sam" role="Strategy" state={agentStatus.sam} color="#10B981" />
+            <AgentCard
+              emoji="🔍" name="Alex" role="Research"
+              state={agentStatus.alex} color="#6366F1"
+              onClick={agentStatus.alex === "done" ? () => openChat("alex") : undefined}
+            />
+            <AgentCard
+              emoji="📊" name="Sam" role="Strategy"
+              state={agentStatus.sam} color="#10B981"
+              onClick={agentStatus.sam === "done" ? () => openChat("sam") : undefined}
+            />
           </motion.div>
         )}
 
@@ -353,7 +375,7 @@ export function ReportView({ startup }: ReportViewProps) {
         </AnimatePresence>
       </div>
 
-      {/* Report side panel */}
+      {/* Report side panel (right) */}
       <ReportPanel
         open={panel.open}
         title={panel.type === "research" ? "Research Report" : "Strategy Report"}
@@ -365,7 +387,16 @@ export function ReportView({ startup }: ReportViewProps) {
         accentRGB={panel.type === "research" ? [99, 102, 241] : [16, 185, 129]}
         onClose={() => setPanel((p) => ({ ...p, open: false }))}
       />
-    </div>
+    </motion.div>
+
+    {/* Agent chat panel (left) — outside the shifting wrapper so it stays fixed */}
+    <AgentChatPanel
+      open={chatPanel.open}
+      agent={chatPanel.agent}
+      startupId={startup.id}
+      onClose={() => setChatPanel(p => ({ ...p, open: false }))}
+    />
+    </>
   );
 }
 
@@ -383,8 +414,8 @@ function StepBadge({ n, label, done, active }: { n: number; label: string; done:
   );
 }
 
-function AgentCard({ emoji, name, role, state, color, subtitle }: {
-  emoji: string; name: string; role: string; state: "waiting" | "thinking" | "done"; color: string; subtitle?: string;
+function AgentCard({ emoji, name, role, state, color, subtitle, onClick }: {
+  emoji: string; name: string; role: string; state: "waiting" | "thinking" | "done"; color: string; subtitle?: string; onClick?: () => void;
 }) {
   const isThinking = state === "thinking";
   const isDone = state === "done";
@@ -392,7 +423,14 @@ function AgentCard({ emoji, name, role, state, color, subtitle }: {
     <motion.div
       animate={{ borderColor: isDone ? `${color}30` : "#1F1F1F" }}
       className="flex items-center gap-4 rounded-xl border px-4 py-3"
-      style={{ background: isDone ? `${color}08` : "#111111", borderColor: "#1F1F1F" }}
+      style={{
+        background: isDone ? `${color}08` : "#111111",
+        borderColor: "#1F1F1F",
+        cursor: isDone && onClick ? "pointer" : "default",
+      }}
+      onClick={isDone ? onClick : undefined}
+      whileHover={isDone && onClick ? { scale: 1.012 } : {}}
+      whileTap={isDone && onClick ? { scale: 0.99 } : {}}
     >
       <div
         className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 relative"
@@ -417,7 +455,19 @@ function AgentCard({ emoji, name, role, state, color, subtitle }: {
           {subtitle ?? (isDone ? "Report ready" : isThinking ? "Working…" : "Waiting…")}
         </p>
       </div>
-      <div className="shrink-0">
+      <div className="shrink-0 flex items-center gap-2">
+        {isDone && onClick && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3 }}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium"
+            style={{ background: `${color}15`, color }}
+          >
+            <MessageSquare size={11} />
+            Chat
+          </motion.div>
+        )}
         {isDone && (
           <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 400 }}>
             <CheckCircle size={16} style={{ color }} />
