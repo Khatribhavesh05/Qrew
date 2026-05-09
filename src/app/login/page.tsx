@@ -3,17 +3,10 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
-import { Card, CardContent } from "@/components/ui/card";
 
 function GoogleIcon() {
   return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      aria-hidden="true"
-    >
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
       <path
         d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908C16.658 14.013 17.64 11.705 17.64 9.2z"
         fill="#4285F4"
@@ -43,158 +36,72 @@ export default function LoginPage() {
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
-        queryParams: {
-          access_type: "offline",
-          prompt: "consent",
-        },
+        queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
     setLoading(false);
   };
 
   return (
-    <div
-      className="relative flex min-h-screen flex-1 items-center justify-center overflow-hidden"
-      style={{ background: "#0A0A0A" }}
-    >
-      {/* Subtle radial glow behind the card */}
+    <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#0A0A0A]">
+      {/* Radial glow top-right */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 70% 40% at 50% 0%, rgba(99,102,241,0.12), transparent)",
+            "radial-gradient(ellipse 60% 50% at 80% 0%, rgba(99,102,241,0.10), transparent 70%)",
         }}
       />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="relative w-full max-w-[420px] px-4"
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="relative bg-[#111111] border border-[#1F1F1F] rounded-2xl p-10 max-w-md w-full mx-4"
       >
-        <Card
-          className="border-0 text-center shadow-none"
-          style={{
-            background: "#111111",
-            borderRadius: "12px",
-            outline: "1px solid #1F1F1F",
+        {/* Logo */}
+        <div className="flex flex-col items-center">
+          <span
+            className="text-3xl font-bold text-white"
+            style={{ letterSpacing: "-0.04em" }}
+          >
+            qrew
+          </span>
+          <div className="mt-2 h-0.5 w-8 rounded-full bg-[#6366F1]" />
+          <p className="text-lg mt-4" style={{ color: "#888888" }}>
+            Your AI founding team.
+          </p>
+        </div>
+
+        {/* Divider */}
+        <div className="border-t border-[#1F1F1F] my-8" />
+
+        {/* Google button */}
+        <button
+          onClick={handleGoogleSignIn}
+          disabled={loading}
+          className="bg-[#1A1A1A] border border-[#2A2A2A] text-white rounded-xl py-3.5 px-6 w-full flex items-center justify-center gap-3 transition-all duration-200 disabled:opacity-50"
+          onMouseEnter={(e) => {
+            if (!loading) e.currentTarget.style.borderColor = "#6366F1";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "#2A2A2A";
           }}
         >
-          <CardContent className="flex flex-col items-center gap-8 px-8 py-12">
-            {/* Wordmark */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1, duration: 0.5 }}
-              className="flex flex-col items-center gap-3"
-            >
-              <span
-                className="text-4xl font-bold tracking-tighter"
-                style={{ color: "#F5F5F5", letterSpacing: "-0.04em" }}
-              >
-                qrew
-              </span>
-              <div
-                className="h-px w-10 rounded-full"
-                style={{
-                  background:
-                    "linear-gradient(90deg, transparent, #6366F1, transparent)",
-                }}
-              />
-            </motion.div>
+          <GoogleIcon />
+          <span className="text-sm font-medium">
+            {loading ? "Redirecting…" : "Continue with Google"}
+          </span>
+        </button>
 
-            {/* Headline + subtext */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.5 }}
-              className="flex flex-col gap-2.5"
-            >
-              <h1
-                className="text-2xl font-semibold leading-tight tracking-tight"
-                style={{ color: "#F5F5F5", letterSpacing: "-0.02em" }}
-              >
-                Your AI founding team awaits
-              </h1>
-              <p className="text-sm leading-relaxed" style={{ color: "#A3A3A3" }}>
-                Research. Strategy. Launch.{" "}
-                <span style={{ color: "#F5F5F5" }}>All in one place.</span>
-              </p>
-            </motion.div>
-
-            {/* Google sign-in */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3, duration: 0.5 }}
-              className="w-full"
-            >
-              <button
-                onClick={handleGoogleSignIn}
-                disabled={loading}
-                className="group flex w-full items-center justify-center gap-3 rounded-lg px-6 py-3.5 text-sm font-medium transition-all duration-200 disabled:opacity-50"
-                style={{
-                  background: "#161616",
-                  border: "1px solid #2A2A2A",
-                  color: "#F5F5F5",
-                  borderRadius: "8px",
-                }}
-                onMouseEnter={(e) => {
-                  if (loading) return;
-                  e.currentTarget.style.borderColor = "#6366F1";
-                  e.currentTarget.style.boxShadow =
-                    "0 0 24px rgba(99,102,241,0.18)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "#2A2A2A";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                <GoogleIcon />
-                {loading ? "Redirecting…" : "Continue with Google"}
-              </button>
-            </motion.div>
-
-            {/* Footer */}
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.45, duration: 0.5 }}
-              className="text-xs leading-relaxed"
-              style={{ color: "#525252" }}
-            >
-              By continuing you agree to our{" "}
-              <a
-                href="#"
-                className="underline underline-offset-2 transition-colors"
-                style={{ color: "#525252" }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.color = "#A3A3A3")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.color = "#525252")
-                }
-              >
-                Terms
-              </a>{" "}
-              and{" "}
-              <a
-                href="#"
-                className="underline underline-offset-2 transition-colors"
-                style={{ color: "#525252" }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.color = "#A3A3A3")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.color = "#525252")
-                }
-              >
-                Privacy Policy
-              </a>
-            </motion.p>
-          </CardContent>
-        </Card>
+        <p className="text-xs text-center mt-4" style={{ color: "#444444" }}>
+          By continuing you agree to our Terms and Privacy Policy
+        </p>
       </motion.div>
+
+      <p className="text-xs text-center mt-8" style={{ color: "#333333" }}>
+        © 2026 Qrew
+      </p>
     </div>
   );
 }

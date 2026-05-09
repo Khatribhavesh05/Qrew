@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm list *)",
+      "Bash(mkdir -p /Users/bhavesh/Desktop/qrew/src/app/api/startups/\\\\[startupId\\\\]/generate /Users/bhavesh/Desktop/qrew/src/app/api/startups/\\\\[startupId\\\\]/mcqs)",
+      "Bash(grep -E \"\\(sql|md\\)$\")",
+      "Bash(mkdir -p \"/Users/bhavesh/Desktop/qrew/src/app/api/startups/[startupId]/brand\" \"/Users/bhavesh/Desktop/qrew/src/app/api/startups/[startupId]/build\" \"/Users/bhavesh/Desktop/qrew/src/app/app/[startupId]/build\")",
+      "Bash(mkdir -p \"/Users/bhavesh/Desktop/qrew/src/app/api/startups/[startupId]/build/cancel\" \"/Users/bhavesh/Desktop/qrew/src/app/api/startups/[startupId]/deploy\")"
+    ],
+    "additionalDirectories": [
+      "/Users/bhavesh/Desktop/qrew/src/app/api/startups/[startupId]",
+      "/Users/bhavesh/Desktop/qrew/src/app/api/startups/[startupId]/build"
+    ]
+  }
+}
