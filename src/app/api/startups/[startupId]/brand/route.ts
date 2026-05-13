@@ -25,7 +25,15 @@ function getPalette(vibe: string): { colors: string[]; fonts: string[] } {
   return VIBE_PALETTES.dark;
 }
 
-async function generateFluxImage(prompt: string): Promise<string> {
+// Fal.ai Flux Schnell returns base64 data URIs, not hosted URLs.
+// We upload to Supabase Storage (bucket: "brand-assets") and return the public URL.
+// NOTE: Create the "brand-assets" bucket manually in your Supabase dashboard
+//       (Storage → New bucket → name: "brand-assets" → Public: true).
+async function generateFluxImage(
+  prompt: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  storagePath: string
+): Promise<string> {
   const res = await fetch("https://fal.run/fal-ai/flux/schnell", {
     method: "POST",
     headers: {
@@ -48,9 +56,40 @@ async function generateFluxImage(prompt: string): Promise<string> {
   }
 
   const data = (await res.json()) as { images: Array<{ url: string }> };
-  const url = data.images?.[0]?.url;
-  if (!url) throw new Error("Fal.ai returned no image URL");
-  return url;
+  const raw = data.images?.[0]?.url;
+  if (!raw) throw new Error("Fal.ai returned no image");
+
+  // Strip the data URI prefix to get the raw base64 string
+  const base64 = raw.startsWith("data:")
+    ? raw.split(",")[1] ?? raw
+    : null;
+
+  if (!base64) {
+    // Already a real URL (unlikely with Schnell, but handle it)
+    return raw;
+  }
+
+  // Decode base64 → binary buffer
+  const buffer = Buffer.from(base64, "base64");
+
+  // Upload to Supabase Storage
+  const { error: uploadError } = await supabase.storage
+    .from("brand-assets")
+    .upload(storagePath, buffer, {
+      contentType: "image/jpeg",
+      upsert: true,
+    });
+
+  if (uploadError) {
+    throw new Error(`Storage upload failed (${storagePath}): ${uploadError.message}`);
+  }
+
+  // Return the permanent public URL
+  const { data: { publicUrl } } = supabase.storage
+    .from("brand-assets")
+    .getPublicUrl(storagePath);
+
+  return publicUrl;
 }
 
 export async function POST(
@@ -79,22 +118,19 @@ export async function POST(
 
   try {
     const [bgUrl, textureUrl] = await Promise.all([
-      generateFluxImage(bgPrompt),
-      generateFluxImage(texturePrompt),
+      generateFluxImage(bgPrompt, supabase, `${startupId}/bg.jpg`),
+      generateFluxImage(texturePrompt, supabase, `${startupId}/texture.jpg`),
     ]);
 
-    const safeBgUrl = bgUrl.startsWith('data:') ? '' : bgUrl;
-    const safeTextureUrl = textureUrl.startsWith('data:') ? '' : textureUrl;
-
     await supabase.from("company_brain").update({
-      flux_bg_url: safeBgUrl,
-      flux_texture_url: safeTextureUrl,
+      flux_bg_url: bgUrl,
+      flux_texture_url: textureUrl,
       colors: palette.colors,
       fonts: JSON.stringify(palette.fonts),
       updated_at: new Date().toISOString(),
     }).eq("startup_id", startupId);
 
-    return NextResponse.json({ bgUrl: safeBgUrl, textureUrl: safeTextureUrl, colors: palette.colors, fonts: palette.fonts });
+    return NextResponse.json({ bgUrl, textureUrl, colors: palette.colors, fonts: palette.fonts });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Brand generation failed";
     return NextResponse.json({ error: msg }, { status: 500 });

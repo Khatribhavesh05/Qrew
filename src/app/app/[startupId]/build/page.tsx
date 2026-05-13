@@ -136,6 +136,25 @@ const INITIAL_STEPS: Record<GenStepId, StepStatus> = {
   riley_deploy: "waiting",
 };
 
+// ── Step order for state restoration ─────────────────────────────────────────
+
+const MORGAN_STEP_ORDER: GenStepId[] = [
+  "jordan",
+  "morgan_frontend",
+  "morgan_backend",
+  "morgan_review",
+];
+
+function restoreStepsFromCurrent(currentStep: string | null): Record<GenStepId, StepStatus> {
+  const steps = { ...INITIAL_STEPS };
+  if (!currentStep) return steps;
+  const idx = MORGAN_STEP_ORDER.indexOf(currentStep as GenStepId);
+  if (idx === -1) return steps;
+  for (let i = 0; i < idx; i++) steps[MORGAN_STEP_ORDER[i]] = "done";
+  steps[MORGAN_STEP_ORDER[idx]] = "running";
+  return steps;
+}
+
 // ── Helper: extract file paths from code chunks ───────────────────────────────
 
 function extractFilePaths(chunk: string): string[] {
@@ -181,53 +200,204 @@ export default function BuildPage() {
     liveUrl: "",
   });
 
+  // initDone gates the SSE start — stays false until we know what mode we're in
+  const [initDone, setInitDone] = useState(false);
+
   const abortRef = useRef<AbortController | null>(null);
   const startedRef = useRef(false);
   const currentStepRef = useRef<GenStepId | null>(null);
-  // Tracks which file is currently being generated per step (mutable, no re-render)
   const currentFilePerStep = useRef<Partial<Record<GenStepId, string>>>({});
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Load brand from Supabase immediately ─────────────────────────────────────
+  // ── Unified init: load brand + check status + decide mode ────────────────────
 
   useEffect(() => {
     void (async () => {
-      const [{ data: brain }, { data: startup }] = await Promise.all([
+      // Fetch everything in parallel
+      const [{ data: brain }, { data: startup }, { data: latestBuild }] = await Promise.all([
         supabase
           .from("company_brain")
-          .select("startup_name, colors, fonts")
+          .select("startup_name, colors, fonts, flux_bg_url")
           .eq("startup_id", startupId)
           .maybeSingle(),
         supabase
           .from("startups")
-          .select("name, industry, audience")
+          .select("name, industry, audience, status")
           .eq("id", startupId)
+          .maybeSingle(),
+        supabase
+          .from("builds")
+          .select("status, current_step")
+          .eq("startup_id", startupId)
+          .order("started_at", { ascending: false })
+          .limit(1)
           .maybeSingle(),
       ]);
 
-      setState(prev => {
-        const rawFonts = (brain as { fonts?: string | null } | null)?.fonts;
-        const parsedFonts = (() => {
-          if (!rawFonts) return prev.fonts;
-          try { return JSON.parse(rawFonts) as string[]; }
-          catch { return [rawFonts]; }
-        })();
+      // Parse brand data
+      const rawFonts = (brain as { fonts?: string | null } | null)?.fonts;
+      const parsedFonts = (() => {
+        if (!rawFonts) return ["Space Grotesk", "Inter"];
+        try { return JSON.parse(rawFonts) as string[]; }
+        catch { return [rawFonts, "Inter"]; }
+      })();
+      const parsedColors =
+        (brain as { colors?: string[] | null } | null)?.colors ??
+        ["#0A0A0A", "#6366F1", "#818CF8", "#C7D2FE"];
+      const parsedBgUrl =
+        (brain as { flux_bg_url?: string | null } | null)?.flux_bg_url ?? null;
 
-        return {
+      const status = (startup as { status?: string } | null)?.status;
+
+      // ── Case 1: already built — show delivery card from code_maps ────────────
+      if (status === "built") {
+        const { data: codeMap } = await supabase
+          .from("code_maps")
+          .select("file_map")
+          .eq("startup_id", startupId)
+          .maybeSingle();
+
+        const fileMap = (codeMap?.file_map ?? {}) as Record<string, string>;
+        const filePaths = Object.keys(fileMap);
+
+        startedRef.current = true; // block SSE
+        setState(prev => ({
           ...prev,
           startupName:
             (brain as { startup_name?: string | null } | null)?.startup_name ??
             (startup as { name?: string | null } | null)?.name ??
             prev.startupName,
-          colors: (brain as { colors?: string[] | null } | null)?.colors ?? prev.colors,
+          colors: parsedColors,
           fonts: parsedFonts,
+          bgUrl: parsedBgUrl,
           industry: (startup as { industry?: string | null } | null)?.industry ?? null,
           audience: (startup as { audience?: string | null } | null)?.audience ?? null,
-        };
-      });
+          phase: "complete",
+          fileCount: filePaths.length,
+          filePaths,
+          steps: {
+            ...INITIAL_STEPS,
+            jordan: "done",
+            morgan_frontend: "done",
+            morgan_backend: "done",
+            morgan_review: "done",
+          },
+        }));
+        setInitDone(true);
+        return;
+      }
+
+      // ── Case 2: build in progress — restore step states, poll for completion ─
+      if (
+        status === "building" &&
+        (latestBuild as { status?: string } | null)?.status === "running"
+      ) {
+        const currentStep =
+          (latestBuild as { current_step?: string | null } | null)?.current_step ?? null;
+        const restoredSteps = restoreStepsFromCurrent(currentStep);
+
+        startedRef.current = true; // block SSE — don't start a second build
+        setState(prev => ({
+          ...prev,
+          startupName:
+            (brain as { startup_name?: string | null } | null)?.startup_name ??
+            (startup as { name?: string | null } | null)?.name ??
+            prev.startupName,
+          colors: parsedColors,
+          fonts: parsedFonts,
+          bgUrl: parsedBgUrl,
+          industry: (startup as { industry?: string | null } | null)?.industry ?? null,
+          audience: (startup as { audience?: string | null } | null)?.audience ?? null,
+          phase: "running",
+          steps: restoredSteps,
+        }));
+
+        // Poll until the build finishes (server SSE is still running independently)
+        pollRef.current = setInterval(async () => {
+          const [{ data: freshStartup }, { data: freshBuild }] = await Promise.all([
+            supabase.from("startups").select("status").eq("id", startupId).maybeSingle(),
+            supabase
+              .from("builds")
+              .select("status, current_step")
+              .eq("startup_id", startupId)
+              .order("started_at", { ascending: false })
+              .limit(1)
+              .maybeSingle(),
+          ]);
+
+          const freshStatus = (freshStartup as { status?: string } | null)?.status;
+          const freshStep =
+            (freshBuild as { current_step?: string | null } | null)?.current_step ?? null;
+
+          // Update step display from DB
+          setState(prev => ({
+            ...prev,
+            steps: restoreStepsFromCurrent(freshStep),
+          }));
+
+          if (freshStatus === "built") {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+
+            const { data: codeMap } = await supabase
+              .from("code_maps")
+              .select("file_map")
+              .eq("startup_id", startupId)
+              .maybeSingle();
+
+            const fileMap = (codeMap?.file_map ?? {}) as Record<string, string>;
+            const filePaths = Object.keys(fileMap);
+
+            setState(prev => ({
+              ...prev,
+              phase: "complete",
+              fileCount: filePaths.length,
+              filePaths,
+              steps: {
+                ...prev.steps,
+                jordan: "done",
+                morgan_frontend: "done",
+                morgan_backend: "done",
+                morgan_review: "done",
+              },
+            }));
+          } else if (freshStatus === "error") {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            setState(prev => ({ ...prev, phase: "error", error: "Build failed on the server" }));
+          } else if (freshStatus !== "building") {
+            // Unexpected status change — stop polling
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+          }
+        }, 5000);
+
+        setInitDone(true);
+        return;
+      }
+
+      // ── Case 3: fresh build — load brand, let SSE start normally ─────────────
+      setState(prev => ({
+        ...prev,
+        startupName:
+          (brain as { startup_name?: string | null } | null)?.startup_name ??
+          (startup as { name?: string | null } | null)?.name ??
+          prev.startupName,
+        colors: parsedColors,
+        fonts: parsedFonts,
+        bgUrl: parsedBgUrl,
+        industry: (startup as { industry?: string | null } | null)?.industry ?? null,
+        audience: (startup as { audience?: string | null } | null)?.audience ?? null,
+      }));
+      setInitDone(true);
     })();
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, [startupId]);
 
-  // ── Build SSE ─────────────────────────────────────────────────────────────────
+  // ── Build SSE — only fires after init, only if not blocked ───────────────────
 
   const startBuild = useCallback(async () => {
     if (startedRef.current) return;
@@ -375,20 +545,22 @@ export default function BuildPage() {
   }, [startupId, buildType]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!initDone) return;
     void startBuild();
     return () => { abortRef.current?.abort(); };
-  }, [startBuild]);
+  }, [startBuild, initDone]);
 
   // ── Actions ───────────────────────────────────────────────────────────────────
 
   const handleStop = async () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     abortRef.current?.abort();
     setState(prev => ({ ...prev, phase: "stopped" }));
     await fetch(`/api/startups/${startupId}/build/cancel`, { method: "POST" }).catch(() => null);
   };
 
   const handleResume = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     startedRef.current = false;
     currentFilePerStep.current = {};
     setState(prev => ({
