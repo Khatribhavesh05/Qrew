@@ -11,6 +11,7 @@ import {
   Square, FileCode2, AlertCircle,
   Download, GitBranch, Rocket, Sparkles,
 } from "lucide-react";
+import { BuildIDE } from "@/components/BuildIDE";
 import { supabase } from "@/lib/supabase";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -66,6 +67,7 @@ interface BuildState {
   deployError: string | null;
   githubUrl: string;
   liveUrl: string;
+  fileMap: Record<string, string>;
 }
 
 // ── Step definitions ──────────────────────────────────────────────────────────
@@ -198,10 +200,13 @@ export default function BuildPage() {
     deployError: null,
     githubUrl: "",
     liveUrl: "",
+    fileMap: {},
   });
 
   // initDone gates the SSE start — stays false until we know what mode we're in
   const [initDone, setInitDone] = useState(false);
+  // File activity feed — most-recent first, populated from SSE code_chunk events
+  const [recentFiles, setRecentFiles] = useState<string[]>([]);
 
   const abortRef = useRef<AbortController | null>(null);
   const startedRef = useRef(false);
@@ -275,6 +280,7 @@ export default function BuildPage() {
           phase: "complete",
           fileCount: filePaths.length,
           filePaths,
+          fileMap,
           steps: {
             ...INITIAL_STEPS,
             jordan: "done",
@@ -353,6 +359,7 @@ export default function BuildPage() {
               phase: "complete",
               fileCount: filePaths.length,
               filePaths,
+              fileMap,
               steps: {
                 ...prev.steps,
                 jordan: "done",
@@ -472,6 +479,11 @@ export default function BuildPage() {
                     [step]: [...new Set([...(prev.stepFiles[step] ?? []), generatingFile])],
                   },
                 }));
+                // Surface in brand-preview activity feed
+                setRecentFiles(prev => {
+                  const without = prev.filter(f => f !== generatingFile);
+                  return [generatingFile, ...without].slice(0, 8);
+                });
               }
 
               // Also extract paths from JSON backend output
@@ -518,6 +530,16 @@ export default function BuildPage() {
                   morgan_review: "done",
                 },
               }));
+              // Fetch full file map for WebContainer preview
+              void (async () => {
+                const { data: codeMap } = await supabase
+                  .from("code_maps")
+                  .select("file_map")
+                  .eq("startup_id", startupId)
+                  .maybeSingle();
+                const fileMap = (codeMap?.file_map ?? {}) as Record<string, string>;
+                setState(prev => ({ ...prev, fileMap }));
+              })();
             }
 
             if (ev.type === "cancelled") {
@@ -743,17 +765,42 @@ export default function BuildPage() {
           className="hidden lg:flex flex-col flex-[2] border-l overflow-hidden"
           style={{ borderColor: "#1F1F1F" }}
         >
-          <RightPanel
-            colors={state.colors}
-            fonts={state.fonts}
-            bgUrl={state.bgUrl}
-            startupName={state.startupName}
-            industry={state.industry}
-            audience={state.audience}
-            jordanDone={state.steps.jordan === "done"}
-            isRunning={isRunning}
-            primaryColor={primary}
-          />
+          <AnimatePresence mode="wait">
+            {state.phase === "complete" && Object.keys(state.fileMap).length > 0 ? (
+              <motion.div
+                key="ide"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4 }}
+                className="flex flex-col h-full"
+              >
+                <BuildIDE files={state.fileMap} />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="brand"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4 }}
+                className="flex flex-col h-full"
+              >
+                <RightPanel
+                  colors={state.colors}
+                  fonts={state.fonts}
+                  bgUrl={state.bgUrl}
+                  startupName={state.startupName}
+                  industry={state.industry}
+                  audience={state.audience}
+                  jordanDone={state.steps.jordan === "done"}
+                  isRunning={isRunning}
+                  primaryColor={primary}
+                  recentFiles={recentFiles}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>
@@ -1323,7 +1370,7 @@ function FileList({ paths }: { paths: string[] }) {
 
 function RightPanel({
   colors, fonts, bgUrl, startupName, industry, audience,
-  jordanDone, isRunning, primaryColor,
+  jordanDone, isRunning, primaryColor, recentFiles = [],
 }: {
   colors: string[];
   fonts: string[];
@@ -1334,6 +1381,7 @@ function RightPanel({
   jordanDone: boolean;
   isRunning: boolean;
   primaryColor: string;
+  recentFiles?: string[];
 }) {
   return (
     <div className="flex flex-col flex-1 overflow-hidden relative">
@@ -1512,6 +1560,43 @@ function RightPanel({
           </div>
         </div>
       </div>
+
+      {/* File activity feed — sticky bottom, only during active generation */}
+      <AnimatePresence>
+        {recentFiles.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="shrink-0 relative z-10 border-t px-4 py-3"
+            style={{ borderColor: "#1A1A1A", background: "rgba(10,10,10,0.9)", backdropFilter: "blur(8px)" }}
+          >
+            <p className="text-[9px] font-semibold uppercase tracking-widest mb-2" style={{ color: "#2A2A2A" }}>
+              Generating
+            </p>
+            <div className="flex flex-col gap-1 overflow-hidden" style={{ maxHeight: "88px" }}>
+              <AnimatePresence mode="popLayout">
+                {recentFiles.slice(0, 5).map(f => (
+                  <motion.div
+                    key={f}
+                    layout
+                    initial={{ opacity: 0, x: -10, height: 0 }}
+                    animate={{ opacity: 1, x: 0, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex items-center gap-1.5 text-[10px] font-mono truncate"
+                  >
+                    <span style={{ color: primaryColor }}>⚡</span>
+                    <span className="truncate" style={{ color: "#525252" }}>
+                      {f}
+                    </span>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
