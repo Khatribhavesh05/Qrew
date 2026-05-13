@@ -52,6 +52,8 @@ interface BuildState {
   steps: Record<GenStepId, StepStatus>;
   stepCode: Partial<Record<GenStepId, string>>;
   stepFiles: Partial<Record<GenStepId, string[]>>;
+  stepCurrentFile: Partial<Record<GenStepId, string>>;
+  stepFileContents: Partial<Record<GenStepId, Record<string, string>>>;
   startupName: string;
   industry: string | null;
   audience: string | null;
@@ -138,9 +140,16 @@ const INITIAL_STEPS: Record<GenStepId, StepStatus> = {
 
 function extractFilePaths(chunk: string): string[] {
   const paths: string[] = [];
+  // JSON format from Claude backend generation
   for (const m of chunk.matchAll(/"path"\s*:\s*"([^"]+\.[a-z]{2,4})"/g)) paths.push(m[1]);
+  // Comment format from self-correction
   for (const m of chunk.matchAll(/^\/\/ ([\w/-]+\.[tj]sx?)$/gm)) paths.push(m[1]);
   return [...new Set(paths)];
+}
+
+function extractGeneratingFile(chunk: string): string | null {
+  const m = chunk.match(/\/\/ ═══ GENERATING: ([^\s═\n]+) ═══/);
+  return m ? m[1] : null;
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -156,6 +165,8 @@ export default function BuildPage() {
     steps: { ...INITIAL_STEPS },
     stepCode: {},
     stepFiles: {},
+    stepCurrentFile: {},
+    stepFileContents: {},
     startupName: "Your Startup",
     industry: null,
     audience: null,
@@ -173,6 +184,8 @@ export default function BuildPage() {
   const abortRef = useRef<AbortController | null>(null);
   const startedRef = useRef(false);
   const currentStepRef = useRef<GenStepId | null>(null);
+  // Tracks which file is currently being generated per step (mutable, no re-render)
+  const currentFilePerStep = useRef<Partial<Record<GenStepId, string>>>({});
 
   // ── Load brand from Supabase immediately ─────────────────────────────────────
 
@@ -276,17 +289,45 @@ export default function BuildPage() {
             if (ev.type === "code_chunk" && ev.chunk) {
               const step = (ev.step as GenStepId | undefined) ?? currentStepRef.current;
               if (!step) continue;
-              const files = extractFilePaths(ev.chunk);
+
+              // Detect GENERATING marker — signals a new file starting
+              const generatingFile = extractGeneratingFile(ev.chunk);
+              if (generatingFile) {
+                currentFilePerStep.current[step] = generatingFile;
+                setState(prev => ({
+                  ...prev,
+                  stepCurrentFile: { ...prev.stepCurrentFile, [step]: generatingFile },
+                  stepFiles: {
+                    ...prev.stepFiles,
+                    [step]: [...new Set([...(prev.stepFiles[step] ?? []), generatingFile])],
+                  },
+                }));
+              }
+
+              // Also extract paths from JSON backend output
+              const jsonPaths = extractFilePaths(ev.chunk);
+
+              const curFile = currentFilePerStep.current[step];
+
               setState(prev => ({
                 ...prev,
                 stepCode: {
                   ...prev.stepCode,
                   [step]: (prev.stepCode[step] ?? "") + ev.chunk,
                 },
-                ...(files.length > 0 ? {
+                ...(curFile ? {
+                  stepFileContents: {
+                    ...prev.stepFileContents,
+                    [step]: {
+                      ...(prev.stepFileContents[step] ?? {}),
+                      [curFile]: ((prev.stepFileContents[step] ?? {})[curFile] ?? "") + ev.chunk,
+                    },
+                  },
+                } : {}),
+                ...(jsonPaths.length > 0 ? {
                   stepFiles: {
                     ...prev.stepFiles,
-                    [step]: [...new Set([...(prev.stepFiles[step] ?? []), ...files])],
+                    [step]: [...new Set([...(prev.stepFiles[step] ?? []), ...jsonPaths])],
                   },
                 } : {}),
               }));
@@ -349,12 +390,15 @@ export default function BuildPage() {
 
   const handleResume = () => {
     startedRef.current = false;
+    currentFilePerStep.current = {};
     setState(prev => ({
       ...prev,
       phase: "idle",
       steps: { ...INITIAL_STEPS },
       stepCode: {},
       stepFiles: {},
+      stepCurrentFile: {},
+      stepFileContents: {},
       error: null,
     }));
     void startBuild();
@@ -436,6 +480,8 @@ export default function BuildPage() {
               status={state.steps[step.id]}
               code={state.stepCode[step.id] ?? ""}
               files={state.stepFiles[step.id] ?? []}
+              currentFile={state.stepCurrentFile[step.id]}
+              fileContents={state.stepFileContents[step.id] ?? {}}
               primaryColor={primary}
             />
           ))}
@@ -624,15 +670,18 @@ function TopBar({
 // ── StepCard ──────────────────────────────────────────────────────────────────
 
 function StepCard({
-  step, status, code, files, primaryColor,
+  step, status, code, files, currentFile, fileContents, primaryColor,
 }: {
   step: StepDef;
   status: StepStatus;
   code: string;
   files: string[];
+  currentFile?: string;
+  fileContents: Record<string, string>;
   primaryColor: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
   const isDone = status === "done";
   const isRunning = status === "running";
@@ -659,7 +708,7 @@ function StepCard({
   const statusText = isDone
     ? "Complete"
     : isRunning
-    ? step.description
+    ? (currentFile ? `Generating ${currentFile.split("/").pop()}…` : step.description)
     : isFailed
     ? "Failed"
     : "Waiting";
@@ -723,9 +772,14 @@ function StepCard({
             style={{ color: isWaiting ? "#1F1F1F" : isFailed ? "#EF4444" : "#525252" }}
           >
             {statusText}
-            {isRunning && files.length > 0 && (
+            {isRunning && !currentFile && files.length > 0 && (
               <span style={{ color: "#6366F1", marginLeft: "8px" }}>
-                {files.length} file{files.length !== 1 ? "s" : ""} detected
+                {files.length} file{files.length !== 1 ? "s" : ""}
+              </span>
+            )}
+            {isDone && files.length > 0 && (
+              <span style={{ color: "#525252", marginLeft: "8px" }}>
+                · {files.length} file{files.length !== 1 ? "s" : ""}
               </span>
             )}
           </p>
@@ -772,18 +826,30 @@ function StepCard({
             className="overflow-hidden"
           >
             <div className="border-t" style={{ borderColor: "#1A1A1A" }}>
-              {/* File name chips */}
+              {/* File name chips — clickable to show per-file code */}
               {files.length > 0 && (
                 <div className="px-4 pt-3 pb-2 flex flex-wrap gap-1.5">
-                  {files.slice(0, 24).map((f, i) => (
-                    <span
-                      key={i}
-                      className="text-[10px] font-mono rounded-md px-2 py-0.5"
-                      style={{ background: "#161616", color: "#525252" }}
-                    >
-                      {f.split("/").pop()}
-                    </span>
-                  ))}
+                  {files.slice(0, 24).map((f, i) => {
+                    const hasCode = !!fileContents[f];
+                    const isSelected = selectedFile === f;
+                    return (
+                      <motion.button
+                        key={i}
+                        onClick={() => hasCode && setSelectedFile(isSelected ? null : f)}
+                        whileHover={hasCode ? { scale: 1.05 } : {}}
+                        whileTap={hasCode ? { scale: 0.96 } : {}}
+                        className="text-[10px] font-mono rounded-md px-2 py-0.5 transition-colors"
+                        style={{
+                          background: isSelected ? `${step.color}20` : "#161616",
+                          color: isSelected ? step.color : hasCode ? "#6B7B7B" : "#525252",
+                          border: isSelected ? `1px solid ${step.color}40` : "1px solid transparent",
+                          cursor: hasCode ? "pointer" : "default",
+                        }}
+                      >
+                        {f.split("/").pop()}
+                      </motion.button>
+                    );
+                  })}
                   {files.length > 24 && (
                     <span className="text-[10px]" style={{ color: "#2D2D2D" }}>
                       +{files.length - 24} more
@@ -792,8 +858,57 @@ function StepCard({
                 </div>
               )}
 
-              {/* Code preview */}
-              {code.length > 0 && (
+              {/* Per-file code panel (shown when a pill is clicked) */}
+              <AnimatePresence>
+                {selectedFile && fileContents[selectedFile] && (
+                  <motion.div
+                    key={selectedFile}
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden mx-4 mb-3"
+                  >
+                    <div
+                      className="rounded-lg border overflow-auto"
+                      style={{ borderColor: `${step.color}20`, background: "#0A0A0A", maxHeight: "220px" }}
+                    >
+                      <div
+                        className="px-3 py-1.5 border-b flex items-center justify-between"
+                        style={{ borderColor: `${step.color}15` }}
+                      >
+                        <span className="text-[10px] font-mono" style={{ color: step.color }}>
+                          {selectedFile}
+                        </span>
+                        <button
+                          onClick={() => setSelectedFile(null)}
+                          className="text-[10px] cursor-pointer"
+                          style={{ color: "#525252" }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <pre
+                        className="text-xs leading-relaxed whitespace-pre-wrap break-all px-3 py-2"
+                        style={{
+                          color: "#4A5A5A",
+                          fontFamily: "'Fira Code', 'JetBrains Mono', 'Courier New', monospace",
+                        }}
+                      >
+                        {fileContents[selectedFile].slice(0, 5000)}
+                        {fileContents[selectedFile].length > 5000 && (
+                          <span style={{ color: "#2A2A2A" }}>
+                            {"\n\n... +" + (fileContents[selectedFile].length - 5000).toLocaleString() + " chars"}
+                          </span>
+                        )}
+                      </pre>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Fallback code preview (only when no file is selected and no per-file data) */}
+              {!selectedFile && Object.keys(fileContents).length === 0 && code.length > 0 && (
                 <div className="px-4 pb-3 overflow-auto" style={{ maxHeight: "240px" }}>
                   <pre
                     className="text-xs leading-relaxed whitespace-pre-wrap break-all"

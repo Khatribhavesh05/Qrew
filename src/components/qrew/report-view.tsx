@@ -526,15 +526,19 @@ function BuildCard({
   return (
     <div
       className="flex flex-col rounded-xl border p-4 transition-all"
-      style={{ borderColor: `${color}25`, background: `${color}06` }}
+      style={{
+        borderColor: comingSoon ? "#1F1F1F" : `${color}25`,
+        background: comingSoon ? "#0D0D0D" : `${color}06`,
+        opacity: comingSoon ? 0.7 : 1,
+      }}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-bold" style={{ color: comingSoon ? "#525252" : "#F5F5F5" }}>{label}</span>
           {comingSoon && (
-            <span className="text-xs rounded-full px-2 py-0.5 font-medium" style={{ background: "#1F1F1F", color: "#525252", border: "1px solid #2A2A2A" }}>
-              Soon
+            <span className="text-xs rounded-full px-2 py-0.5 font-medium" style={{ background: "#1A1A1A", color: "#444444", border: "1px solid #252525" }}>
+              Coming Soon
             </span>
           )}
         </div>
@@ -591,12 +595,12 @@ function BuildCard({
       <motion.button
         whileHover={!isDisabled ? { scale: 1.02 } : {}}
         whileTap={!isDisabled ? { scale: 0.97 } : {}}
-        onClick={handleClick}
+        onClick={comingSoon ? undefined : handleClick}
         disabled={isDisabled}
-        className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition-all disabled:opacity-40"
+        className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition-all"
         style={comingSoon
-          ? { background: "#111111", color: "#525252", border: "1px solid #1F1F1F", cursor: "not-allowed" }
-          : { background: color, color: "#fff", boxShadow: isDisabled ? "none" : `0 0 16px ${color}40` }
+          ? { background: "#111111", color: "#444444", border: "1px solid #1A1A1A", cursor: "not-allowed", pointerEvents: "none" }
+          : { background: color, color: "#fff", boxShadow: isDisabled ? "none" : `0 0 16px ${color}40`, opacity: isDisabled ? 0.4 : 1 }
         }
       >
         {comingSoon ? "Coming Soon" : <>Start {label} Build <ArrowRight size={12} /></>}
