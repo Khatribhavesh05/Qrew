@@ -24,7 +24,9 @@ async function callV0(
   prompt: string,
   onChunk?: (chunk: string) => void
 ): Promise<string> {
-  console.log("[v0 SDK] Creating chat — prompt length:", prompt.length);
+  const promptBytes = Buffer.byteLength(prompt, "utf8");
+  console.log("[v0 SDK] Prompt chars:", prompt.length, "| bytes:", promptBytes);
+  require('fs').writeFileSync('/tmp/v0-prompt.txt', prompt);
 
   const chat = await v0.chats.create({ message: prompt });
 
@@ -57,13 +59,34 @@ export async function generateLandingPage(
   const [primary, secondary, accent] = brain.colors;
   const [displayFont, bodyFont] = brain.fonts;
 
+  const audience = brain.audience.slice(0, 100);
+  const brandVibe = brain.brand_vibe.slice(0, 100);
+  const valueprop = brain.idea.slice(0, 200);
+
+  const fluxBg = brain.flux_bg_url?.startsWith('data:') ? '' : brain.flux_bg_url ?? '';
+  const fluxTexture = brain.flux_texture_url?.startsWith('data:') ? '' : brain.flux_texture_url ?? '';
+
+  console.log("[v0 field sizes]", {
+    startup_name: brain.startup_name?.length,
+    idea: brain.idea?.length,
+    audience: brain.audience?.length,
+    positioning: brain.positioning?.length,
+    brand_vibe: brain.brand_vibe?.length,
+    tech_stack: brain.tech_stack?.length,
+    revenue_model: brain.revenue_model?.length,
+    flux_bg_url: brain.flux_bg_url?.length,
+    flux_texture_url: brain.flux_texture_url?.length,
+    colors: JSON.stringify(brain.colors)?.length,
+    fonts: JSON.stringify(brain.fonts)?.length,
+  });
+
   const prompt = `Create a stunning, production-ready Next.js landing page for "${brain.startup_name}".
 
 STARTUP CONTEXT:
-- What it does: ${brain.idea}
-- Target audience: ${brain.audience}
-- Unique positioning: ${brain.positioning}
-- Revenue model: ${brain.revenue_model}
+- Industry: ${brain.tech_stack ?? "SaaS"}
+- Target audience: ${audience}
+- Brand vibe: ${brandVibe}
+- Key value proposition: ${valueprop}
 
 BRAND IDENTITY:
 - Primary color: ${primary}
@@ -71,8 +94,8 @@ BRAND IDENTITY:
 - Accent color: ${accent}
 - Display font: "${displayFont}" (import from Google Fonts)
 - Body font: "${bodyFont}" (import from Google Fonts)
-- Hero background image: ${brain.flux_bg_url}
-- Texture overlay: ${brain.flux_texture_url}
+- Hero background image: ${fluxBg}
+- Texture overlay: ${fluxTexture}
 
 REQUIRED SECTIONS (in order):
 1. Navigation — Logo + startup name left, CTA button right
@@ -89,7 +112,7 @@ ANTI-SLOP RULES — VIOLATING THESE WILL FAIL:
 - NEVER Inter as only font — must use ${displayFont} for all headings
 - NEVER empty placeholder text — write real copy for this exact startup
 - NEVER boring hover states — unique micro-interactions on every interactive element
-- ALWAYS use ${brain.flux_bg_url} as the actual hero CSS background-image URL
+- ALWAYS use ${fluxBg} as the actual hero CSS background-image URL
 - ALWAYS Framer Motion: fadeInUp with staggerChildren for each section
 - ALWAYS fully mobile responsive with proper breakpoints
 - ALWAYS dark theme unless brand palette is light

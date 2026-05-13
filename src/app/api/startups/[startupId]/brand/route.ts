@@ -83,15 +83,18 @@ export async function POST(
       generateFluxImage(texturePrompt),
     ]);
 
+    const safeBgUrl = bgUrl.startsWith('data:') ? '' : bgUrl;
+    const safeTextureUrl = textureUrl.startsWith('data:') ? '' : textureUrl;
+
     await supabase.from("company_brain").update({
-      flux_bg_url: bgUrl,
-      flux_texture_url: textureUrl,
+      flux_bg_url: safeBgUrl,
+      flux_texture_url: safeTextureUrl,
       colors: palette.colors,
       fonts: JSON.stringify(palette.fonts),
       updated_at: new Date().toISOString(),
     }).eq("startup_id", startupId);
 
-    return NextResponse.json({ bgUrl, textureUrl, colors: palette.colors, fonts: palette.fonts });
+    return NextResponse.json({ bgUrl: safeBgUrl, textureUrl: safeTextureUrl, colors: palette.colors, fonts: palette.fonts });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Brand generation failed";
     return NextResponse.json({ error: msg }, { status: 500 });
