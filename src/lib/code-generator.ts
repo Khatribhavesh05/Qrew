@@ -60,6 +60,29 @@ export async function generateLandingPage(
   const [primary, secondary, accent] = brain.colors;
   const [displayFont, bodyFont] = brain.fonts;
   const fluxBg = brain.flux_bg_url?.startsWith("data:") ? "" : (brain.flux_bg_url ?? "");
+  const fluxTexture = brain.flux_texture_url?.startsWith("data:") ? "" : (brain.flux_texture_url ?? "");
+
+  // FIX 2: Dynamic layout based on brand_vibe
+  const vibe = brain.brand_vibe.toLowerCase();
+  let layoutInstruction: string;
+  if (vibe.includes("dark") || vibe.includes("minimal")) {
+    layoutInstruction =
+      "Full viewport hero, large asymmetric typography, minimal navbar, content revealed on scroll";
+  } else if (vibe.includes("playful") || vibe.includes("bold")) {
+    layoutInstruction =
+      "Colorful sections, large emoji accents, rounded cards, fun micro-interactions";
+  } else if (vibe.includes("professional") || vibe.includes("corporate")) {
+    layoutInstruction =
+      "Clean grid layout, trust signals above fold, case study style sections";
+  } else {
+    layoutInstruction =
+      "Full viewport hero, bold typography, smooth scroll sections, strong CTA hierarchy";
+  }
+
+  // CSS custom properties string for all brand colors
+  const cssVars = brain.colors
+    .map((c, i) => `--color-${["bg", "primary", "secondary", "accent"][i] ?? `c${i}`}: ${c};`)
+    .join(" ");
 
   const prompt = `Create a stunning, production-ready Next.js landing page for "${brain.startup_name}".
 
@@ -73,13 +96,26 @@ BRAND IDENTITY:
 - Primary color: ${primary}
 - Secondary color: ${secondary}
 - Accent color: ${accent}
-- Display font: "${displayFont}" (import from Google Fonts)
-- Body font: "${bodyFont}" (import from Google Fonts)
-- Hero background image: ${fluxBg}
+- Display font: "${displayFont}" — use this for ALL headings and hero text (import from Google Fonts)
+- Body font: "${bodyFont}" — use this for paragraphs and UI text (import from Google Fonts)
+- CSS custom properties to define in :root { ${cssVars} }
+
+LAYOUT INSTRUCTION (based on brand vibe "${brain.brand_vibe}"):
+${layoutInstruction}
+
+HERO BACKGROUND — CRITICAL:
+${fluxBg
+  ? `- Set the hero section style: backgroundImage: "url('${fluxBg}')", backgroundSize: "cover", backgroundPosition: "center"
+- Layer a dark overlay div with background: "rgba(0,0,0,0.6)" on top so all text is fully readable
+- Do NOT use a gradient in place of this image URL`
+  : `- flux_bg_url is empty — use an animated CSS mesh gradient hero instead using the brand colors above`}
+${fluxTexture
+  ? `- Apply "${fluxTexture}" as a subtle noise texture overlay across the ENTIRE page at 5% opacity using a fixed position pseudo-element or wrapper div`
+  : ""}
 
 REQUIRED SECTIONS (in order):
 1. Navigation — Logo + startup name left, CTA button right
-2. Hero — Full viewport, Flux BG as CSS background-image, dark gradient overlay, noise texture overlay at 5% opacity, startup name as H1 in display font, one-line value prop, two CTA buttons (primary + secondary)
+2. Hero — Full viewport, background as specified above, startup name as H1 in ${displayFont}, one-line value prop, two CTA buttons (primary + secondary)
 3. Features — 3 features with Lucide icons, relevant to this specific product
 4. Social proof — 3 testimonial cards with real-sounding names and quotes
 5. Pricing — Free tier + Pro tier with feature list
@@ -89,10 +125,9 @@ REQUIRED SECTIONS (in order):
 ANTI-SLOP RULES:
 - NEVER use generic purple/blue gradients — use ${primary} and ${secondary} only
 - NEVER "Acme Corp" or "Company" — always "${brain.startup_name}"
-- NEVER Inter as only font — must use ${displayFont} for all headings
+- NEVER Inter as the heading font — must use "${displayFont}" for all headings
 - NEVER empty placeholder text — write real copy for this exact startup
 - NEVER boring hover states — unique micro-interactions on every interactive element
-- ALWAYS use ${fluxBg} as the actual hero CSS background-image URL
 - ALWAYS Framer Motion: fadeInUp with staggerChildren for each section
 - ALWAYS fully mobile responsive with proper breakpoints
 - ALWAYS dark theme unless brand palette is light
