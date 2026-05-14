@@ -29,6 +29,18 @@ export async function GET(
 
   if (!startup) return new Response("Not found", { status: 404 });
 
+  // Check credits before starting build
+  const { data: profileData } = await supabase
+    .from("profiles")
+    .select("credits_balance")
+    .eq("id", user.id)
+    .single();
+
+  const creditsBalance = (profileData as { credits_balance?: number } | null)?.credits_balance ?? 0;
+  if (Number(creditsBalance) < 1.5) {
+    return new Response("Insufficient credits", { status: 402 });
+  }
+
   // Create build record
   const { data: buildRecord } = await supabase
     .from("builds")
@@ -165,7 +177,25 @@ export async function GET(
           updated_at: new Date().toISOString(),
         }, { onConflict: "startup_id" });
 
-        // TODO: deduct credits on completion
+        // Deduct credits on successful build
+        const { data: freshProfile } = await supabase
+          .from("profiles")
+          .select("credits_balance")
+          .eq("id", user.id)
+          .single();
+        const balance = (freshProfile as { credits_balance?: number } | null)?.credits_balance ?? 0;
+        await supabase
+          .from("profiles")
+          .update({ credits_balance: Math.max(0, Number(balance) - 1.5) })
+          .eq("id", user.id);
+        await supabase.from("token_transactions").insert({
+          user_id: user.id,
+          type: "usage",
+          credits: -1.5,
+          startup_id: startupId,
+          description: "Standard build",
+        });
+
         // Code is ready — update to 'built' (waiting for manual deploy)
         await supabase.from("startups").update({ status: "built" }).eq("id", startupId);
 

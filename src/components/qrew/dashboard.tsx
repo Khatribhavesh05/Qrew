@@ -3,24 +3,26 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, ArrowRight, CheckCircle, Loader2, AlertCircle, Zap } from "lucide-react";
+import { Plus, ArrowRight, CheckCircle, Loader2, AlertCircle, Zap, ShoppingCart } from "lucide-react";
 import type { Startup } from "@/types";
 import { AddCompanyModal } from "./add-company-modal";
+import { CreditsModal } from "./CreditsModal";
 
 interface DashboardProps {
   startups: Startup[];
   userEmail: string;
+  creditsBalance: number;
+  paymentSuccess?: boolean;
+  openBuy?: boolean;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof Loader2; pulse: boolean }> = {
-  // New statuses
   draft:         { label: "Processing",      color: "#525252", icon: Loader2,      pulse: false },
   researching:   { label: "Researching",     color: "#3B82F6", icon: Loader2,      pulse: true  },
   ready:         { label: "Ready to Build",  color: "#10B981", icon: CheckCircle,  pulse: false },
   building:      { label: "Building",        color: "#F59E0B", icon: Loader2,      pulse: true  },
   built:         { label: "Built",           color: "#8B5CF6", icon: Zap,          pulse: false },
   deployed:      { label: "Live",            color: "#10B981", icon: CheckCircle,  pulse: false },
-  // Legacy aliases (keep for backward compat with existing DB rows)
   processing:    { label: "Processing",      color: "#525252", icon: Loader2,      pulse: false },
   naming:        { label: "Processing",      color: "#525252", icon: Loader2,      pulse: false },
   team_assembly: { label: "Processing",      color: "#525252", icon: Loader2,      pulse: false },
@@ -35,7 +37,6 @@ function StartupCard({ startup }: { startup: Startup }) {
   const isActive = config.pulse;
 
   const handleClick = () => {
-    // Early-stage statuses still use their sub-pages for the detailed flow
     if (startup.status === "processing" || startup.status === "naming" || startup.status === "draft") {
       router.push(`/app/${startup.id}/process`);
     } else if (startup.status === "team_assembly") {
@@ -60,7 +61,6 @@ function StartupCard({ startup }: { startup: Startup }) {
         (e.currentTarget as HTMLDivElement).style.borderColor = "#1F1F1F";
       }}
     >
-      {/* Status indicator */}
       <div className="flex items-start justify-between mb-4">
         <div
           className="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold"
@@ -72,12 +72,11 @@ function StartupCard({ startup }: { startup: Startup }) {
           className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
           style={{ background: `${config?.color ?? "#6366F1"}15`, color: config?.color ?? "#6366F1" }}
         >
-          {config.pulse && <config.icon size={10} className="animate-spin" />}
+          {isActive && <config.icon size={10} className="animate-spin" />}
           {config.label}
         </span>
       </div>
 
-      {/* Name */}
       <div className="mb-1">
         <h3 className="text-sm font-semibold" style={{ color: "#F5F5F5" }}>
           {startup.name ?? "Unnamed Startup"}
@@ -89,12 +88,10 @@ function StartupCard({ startup }: { startup: Startup }) {
         )}
       </div>
 
-      {/* Idea */}
       <p className="text-xs leading-relaxed mt-2 line-clamp-2" style={{ color: "#A3A3A3" }}>
         {startup.idea}
       </p>
 
-      {/* Footer */}
       <div className="flex items-center justify-between mt-4 pt-4 border-t" style={{ borderColor: "#1A1A1A" }}>
         <span className="text-xs" style={{ color: "#525252" }}>
           {new Date(startup.created_at).toLocaleDateString("en-US", {
@@ -112,11 +109,14 @@ function StartupCard({ startup }: { startup: Startup }) {
   );
 }
 
-export function Dashboard({ startups, userEmail }: DashboardProps) {
+export function Dashboard({ startups, userEmail, creditsBalance, paymentSuccess, openBuy }: DashboardProps) {
   const [showModal, setShowModal] = useState(false);
+  const [showCredits, setShowCredits] = useState(false);
+  const [currentCredits, setCurrentCredits] = useState(creditsBalance);
   const [pendingIdea, setPendingIdea] = useState<string | undefined>();
+  const [successBanner, setSuccessBanner] = useState(false);
+  const router = useRouter();
 
-  // Pick up idea stored from landing page before auth redirect
   useEffect(() => {
     const stored = sessionStorage.getItem("qrew_pending_idea");
     if (stored) {
@@ -126,6 +126,33 @@ export function Dashboard({ startups, userEmail }: DashboardProps) {
       setShowModal(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (paymentSuccess) {
+      setSuccessBanner(true);
+      // Clear the ?payment=success param without full reload
+      const url = new URL(window.location.href);
+      url.searchParams.delete("payment");
+      router.replace(url.pathname + url.search, { scroll: false });
+      const t = setTimeout(() => setSuccessBanner(false), 5000);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentSuccess]);
+
+  useEffect(() => {
+    if (openBuy) {
+      setShowCredits(true);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("buy");
+      router.replace(url.pathname + url.search, { scroll: false });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openBuy]);
+
+  useEffect(() => {
+    setCurrentCredits(creditsBalance);
+  }, [creditsBalance]);
 
   return (
     <div
@@ -141,6 +168,22 @@ export function Dashboard({ startups, userEmail }: DashboardProps) {
         }}
       />
 
+      {/* Payment success banner */}
+      <AnimatePresence>
+        {successBanner && (
+          <motion.div
+            initial={{ opacity: 0, y: -40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -40 }}
+            className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center py-3 text-sm font-medium"
+            style={{ background: "#10B981", color: "#fff" }}
+          >
+            <CheckCircle size={14} className="mr-2" />
+            Credits added to your account!
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Nav */}
       <nav
         className="relative z-10 flex items-center justify-between px-6 py-4 border-b max-w-7xl mx-auto w-full"
@@ -152,7 +195,42 @@ export function Dashboard({ startups, userEmail }: DashboardProps) {
         >
           qrew
         </span>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* Credits balance */}
+          <div
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5"
+            style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}
+          >
+            <Zap size={12} style={{ color: "#6366F1" }} />
+            <span className="text-xs font-semibold" style={{ color: "#6366F1" }}>
+              {currentCredits.toFixed(1)} credits
+            </span>
+          </div>
+
+          {/* Buy credits button */}
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowCredits(true)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
+            style={{
+              background: "#111111",
+              border: "1px solid #1F1F1F",
+              color: "#A3A3A3",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "#333";
+              e.currentTarget.style.color = "#F5F5F5";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "#1F1F1F";
+              e.currentTarget.style.color = "#A3A3A3";
+            }}
+          >
+            <ShoppingCart size={12} />
+            Buy Credits
+          </motion.button>
+
           <span className="text-xs" style={{ color: "#525252" }}>
             {userEmail}
           </span>
@@ -237,7 +315,6 @@ export function Dashboard({ startups, userEmail }: DashboardProps) {
               </motion.div>
             ))}
 
-            {/* Add another card */}
             <motion.button
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -263,6 +340,14 @@ export function Dashboard({ startups, userEmail }: DashboardProps) {
           />
         )}
       </AnimatePresence>
+
+      {/* Credits Modal */}
+      {showCredits && (
+        <CreditsModal
+          creditsBalance={currentCredits}
+          onClose={() => setShowCredits(false)}
+        />
+      )}
     </div>
   );
 }

@@ -9,6 +9,8 @@ import { ReportPanel } from "./report-panel";
 import { AgentChatPanel } from "./agent-chat-panel";
 import type { MCQ } from "@/app/api/startups/[startupId]/mcqs/route";
 import type { Startup } from "@/types";
+import { supabase } from "@/lib/supabase";
+import { CREDIT_COST } from "@/lib/credits";
 
 
 interface ReportViewProps {
@@ -39,11 +41,25 @@ export function ReportView({ startup }: ReportViewProps) {
     open: false, agent: "alex",
   });
   const [error, setError] = useState<string | null>(null);
+  const [creditsBalance, setCreditsBalance] = useState<number | null>(null);
 
   // Guards — prevent duplicate calls
   const mcqsLoadedRef = useRef(false);
   const generationStartedRef = useRef(false);
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("credits_balance")
+        .eq("id", user.id)
+        .single();
+      setCreditsBalance((data as { credits_balance?: number } | null)?.credits_balance ?? 0);
+    })();
+  }, []);
 
   // ── Step 2: Start SSE generation ───────────────────────────────────────────
   const startGeneration = () => {
@@ -356,6 +372,8 @@ export function ReportView({ startup }: ReportViewProps) {
                   reportsReady={isDone}
                   startupId={startup.id}
                   type="standard"
+                  cost={CREDIT_COST.standard}
+                  creditsBalance={creditsBalance}
                 />
                 <BuildCard
                   label="Premium"
@@ -366,6 +384,8 @@ export function ReportView({ startup }: ReportViewProps) {
                   reportsReady={isDone}
                   startupId={startup.id}
                   type="premium"
+                  cost={CREDIT_COST.premium}
+                  creditsBalance={creditsBalance}
                   comingSoon
                 />
               </div>
@@ -510,13 +530,16 @@ function ArtifactCard({ icon, label, subtitle, color, onClick }: {
 
 function BuildCard({
   label, credits, desc, color, tooltip,
-  reportsReady, startupId, type, comingSoon,
+  reportsReady, startupId, type, comingSoon, cost, creditsBalance,
 }: {
   label: string; credits: string; desc: string; color: string; tooltip: string;
   reportsReady: boolean; startupId: string; type: string; comingSoon?: boolean;
+  cost: number; creditsBalance: number | null;
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
-  const isDisabled = !reportsReady || !!comingSoon;
+  const insufficientCredits =
+    !comingSoon && creditsBalance !== null && creditsBalance < cost;
+  const isDisabled = !reportsReady || !!comingSoon || insufficientCredits;
 
   const handleClick = () => {
     if (isDisabled) return;
@@ -592,19 +615,29 @@ function BuildCard({
       <p className="text-xs leading-relaxed mb-4 flex-1" style={{ color: "#525252" }}>{desc}</p>
 
       {/* CTA button */}
-      <motion.button
-        whileHover={!isDisabled ? { scale: 1.02 } : {}}
-        whileTap={!isDisabled ? { scale: 0.97 } : {}}
-        onClick={comingSoon ? undefined : handleClick}
-        disabled={isDisabled}
-        className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition-all"
-        style={comingSoon
-          ? { background: "#111111", color: "#444444", border: "1px solid #1A1A1A", cursor: "not-allowed", pointerEvents: "none" }
-          : { background: color, color: "#fff", boxShadow: isDisabled ? "none" : `0 0 16px ${color}40`, opacity: isDisabled ? 0.4 : 1 }
-        }
-      >
-        {comingSoon ? "Coming Soon" : <>Start {label} Build <ArrowRight size={12} /></>}
-      </motion.button>
+      {insufficientCredits ? (
+        <a
+          href="/app?buy=true"
+          className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition-all"
+          style={{ background: "rgba(239,68,68,0.08)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.2)" }}
+        >
+          Insufficient credits — Buy more
+        </a>
+      ) : (
+        <motion.button
+          whileHover={!isDisabled ? { scale: 1.02 } : {}}
+          whileTap={!isDisabled ? { scale: 0.97 } : {}}
+          onClick={comingSoon ? undefined : handleClick}
+          disabled={isDisabled}
+          className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition-all"
+          style={comingSoon
+            ? { background: "#111111", color: "#444444", border: "1px solid #1A1A1A", cursor: "not-allowed", pointerEvents: "none" }
+            : { background: color, color: "#fff", boxShadow: isDisabled ? "none" : `0 0 16px ${color}40`, opacity: isDisabled ? 0.4 : 1 }
+          }
+        >
+          {comingSoon ? "Coming Soon" : <>Start {label} Build <ArrowRight size={12} /></>}
+        </motion.button>
+      )}
     </div>
   );
 }

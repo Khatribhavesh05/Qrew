@@ -2,6 +2,7 @@ export interface Profile {
   id: string;
   email: string;
   token_balance: number;
+  credits_balance: number;
   free_build_used: boolean;
   created_at: string;
 }

@@ -45,7 +45,8 @@ export async function GET(request: NextRequest) {
           const { error: insertErr } = await admin.from("profiles").insert({
             id: data.user.id,
             email: data.user.email,
-            token_balance: 100000, // 1 free credit on signup
+            token_balance: 100000,
+            credits_balance: 2, // 2 free credits on signup
             free_build_used: false,
           });
           if (insertErr) console.error("[Auth] Profile insert error:", insertErr.message);
