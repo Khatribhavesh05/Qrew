@@ -66,35 +66,32 @@ export async function POST(
 
   const { repoUrl: githubUrl } = (await githubRes.json()) as { repoUrl: string };
 
-  // ── Vercel deploy ────────────────────────────────────────────────────────────
-  let liveUrl = "";
+  // ── Generate Vercel deploy redirect URL ──────────────────────────────────────
+  let vercelDeployUrl = "";
   const vercelRes = await fetch(`${base}/api/deploy/vercel`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: JSON.stringify({ repoUrl: githubUrl, repoName, projectName: repoName }),
+    body: JSON.stringify({ githubUrl, projectName: repoName }),
   });
 
   if (vercelRes.ok) {
-    const data = (await vercelRes.json()) as { deploymentUrl?: string };
-    liveUrl = data.deploymentUrl ?? "";
+    const data = (await vercelRes.json()) as { vercelDeployUrl?: string };
+    vercelDeployUrl = data.vercelDeployUrl ?? "";
   } else {
-    const err = await vercelRes.text();
-    console.error("[deploy] Vercel deploy failed (non-fatal):", err);
+    console.error("[deploy] Failed to generate Vercel URL (non-fatal):", await vercelRes.text());
   }
 
-  // ── Update DB ────────────────────────────────────────────────────────────────
+  // ── Update DB — mark deployed after GitHub push; live_url set later by user ─
   await Promise.all([
     supabase.from("startups").update({
       status: "deployed",
       github_url: githubUrl || null,
-      live_url: liveUrl || null,
     }).eq("id", startupId),
     supabase.from("company_brain").update({
-      live_url: liveUrl || null,
       github_url: githubUrl || null,
       updated_at: new Date().toISOString(),
     }).eq("startup_id", startupId),
   ]);
 
-  return NextResponse.json({ githubUrl, liveUrl, success: true });
+  return NextResponse.json({ githubUrl, vercelDeployUrl, success: true });
 }

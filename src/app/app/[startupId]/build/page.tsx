@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2, Circle, Loader2,
   ChevronDown, ChevronUp,
-  ExternalLink, Globe,
+  ExternalLink,
   Square, FileCode2, AlertCircle,
   Download, GitBranch, Rocket, Sparkles,
 } from "lucide-react";
@@ -66,7 +66,7 @@ interface BuildState {
   error: string | null;
   deployError: string | null;
   githubUrl: string;
-  liveUrl: string;
+  vercelDeployUrl: string;
   fileMap: Record<string, string>;
 }
 
@@ -199,7 +199,7 @@ export default function BuildPage() {
     error: null,
     deployError: null,
     githubUrl: "",
-    liveUrl: "",
+    vercelDeployUrl: "",
     fileMap: {},
   });
 
@@ -607,7 +607,11 @@ export default function BuildPage() {
 
     try {
       const res = await fetch(`/api/startups/${startupId}/deploy`, { method: "POST" });
-      const data = (await res.json()) as { githubUrl?: string; liveUrl?: string; error?: string };
+      const data = (await res.json()) as {
+        githubUrl?: string;
+        vercelDeployUrl?: string;
+        error?: string;
+      };
 
       if (!res.ok) {
         setState(prev => ({
@@ -620,16 +624,9 @@ export default function BuildPage() {
 
       setState(prev => ({
         ...prev,
-        steps: { ...prev.steps, riley_github: "done", riley_deploy: "running" },
+        steps: { ...prev.steps, riley_github: "done", riley_deploy: "done" },
         githubUrl: data.githubUrl ?? "",
-      }));
-
-      await new Promise(r => setTimeout(r, 1200));
-
-      setState(prev => ({
-        ...prev,
-        steps: { ...prev.steps, riley_deploy: "done" },
-        liveUrl: data.liveUrl ?? "",
+        vercelDeployUrl: data.vercelDeployUrl ?? "",
       }));
     } catch (err) {
       setState(prev => ({
@@ -751,7 +748,7 @@ export default function BuildPage() {
                 onDeploy={() => void handleDeploy()}
                 deployError={state.deployError}
                 githubUrl={state.githubUrl}
-                liveUrl={state.liveUrl}
+                vercelDeployUrl={state.vercelDeployUrl}
                 rileyGithubStatus={state.steps.riley_github}
                 rileyDeployStatus={state.steps.riley_deploy}
                 primaryColor={primary}
@@ -1155,9 +1152,18 @@ function StepCard({
 
 // ── DeliveryCard ──────────────────────────────────────────────────────────────
 
+const REQUIRED_ENV_VARS = [
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "STRIPE_SECRET_KEY",
+  "STRIPE_PUBLISHABLE_KEY",
+  "NEXT_PUBLIC_SITE_URL",
+];
+
 function DeliveryCard({
   startupId, fileCount, filePaths, onDeploy, deployError,
-  githubUrl, liveUrl, rileyGithubStatus, rileyDeployStatus, primaryColor,
+  githubUrl, vercelDeployUrl, rileyGithubStatus, rileyDeployStatus, primaryColor,
 }: {
   startupId: string;
   fileCount: number;
@@ -1165,14 +1171,21 @@ function DeliveryCard({
   onDeploy: () => void;
   deployError: string | null;
   githubUrl: string;
-  liveUrl: string;
+  vercelDeployUrl: string;
   rileyGithubStatus: StepStatus;
   rileyDeployStatus: StepStatus;
   primaryColor: string;
 }) {
-  const isDeploying =
-    rileyGithubStatus === "running" || rileyDeployStatus === "running";
-  const isDeployed = rileyDeployStatus === "done";
+  const [envCopied, setEnvCopied] = useState(false);
+
+  const isDeploying = rileyGithubStatus === "running" || rileyDeployStatus === "running";
+  const isDeployed  = rileyGithubStatus === "done";
+
+  const handleCopyEnvVars = () => {
+    void navigator.clipboard.writeText(REQUIRED_ENV_VARS.map(v => `${v}=`).join("\n"));
+    setEnvCopied(true);
+    setTimeout(() => setEnvCopied(false), 2000);
+  };
 
   return (
     <motion.div
@@ -1227,52 +1240,111 @@ function DeliveryCard({
         )}
       </AnimatePresence>
 
-      {/* Live links after deploy */}
-      {isDeployed && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col gap-2 mb-4"
-        >
-          {liveUrl && (
-            <a
-              href={liveUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-90"
-              style={{
-                background: "#10B981",
-                borderColor: "#10B981",
-                color: "#fff",
-                boxShadow: "0 0 20px rgba(16,185,129,0.3)",
-              }}
+      {/* Post-deploy: GitHub + Vercel + env vars */}
+      <AnimatePresence>
+        {isDeployed && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="flex flex-col gap-3 mb-4"
+          >
+            {/* ── GitHub */}
+            <div
+              className="rounded-xl border p-3"
+              style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
             >
-              <Globe size={13} />
-              <span className="flex-1 truncate text-sm">
-                {liveUrl.replace("https://", "")}
-              </span>
-              <ExternalLink size={11} className="opacity-70" />
-            </a>
-          )}
-          {githubUrl && (
-            <a
-              href={githubUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm"
-              style={{ background: "#0D0D0D", borderColor: "#1F1F1F", color: "#A3A3A3" }}
-            >
-              <GitBranch size={13} />
-              <span className="flex-1 text-xs font-mono truncate">
-                {githubUrl.replace("https://github.com/", "")}
-              </span>
-              <ExternalLink size={11} style={{ color: "#525252" }} />
-            </a>
-          )}
-        </motion.div>
-      )}
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-semibold" style={{ color: "#10B981" }}>✅ Code pushed to GitHub</span>
+              </div>
+              {githubUrl && (
+                <a
+                  href={githubUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg border px-3 py-2 transition-opacity hover:opacity-80"
+                  style={{ borderColor: "#1A1A1A", background: "#111111" }}
+                >
+                  <GitBranch size={12} style={{ color: "#525252", flexShrink: 0 }} />
+                  <span className="flex-1 text-xs font-mono truncate" style={{ color: "#A3A3A3" }}>
+                    {githubUrl.replace("https://github.com/", "")}
+                  </span>
+                  <ExternalLink size={10} style={{ color: "#525252", flexShrink: 0 }} />
+                </a>
+              )}
+            </div>
 
-      {/* Action buttons */}
+            {/* ── Vercel */}
+            <div
+              className="rounded-xl border p-3"
+              style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold" style={{ color: "#F5F5F5" }}>🚀 Deploy to Vercel</span>
+              </div>
+              <p className="text-[11px] mb-3" style={{ color: "#525252" }}>
+                Click below to deploy to <span style={{ color: "#A3A3A3" }}>your own</span> Vercel account — free, takes ~60 seconds
+              </p>
+              {vercelDeployUrl && (
+                <motion.a
+                  href={vercelDeployUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold transition-opacity hover:opacity-90"
+                  style={{
+                    background: "#000",
+                    color: "#fff",
+                    border: "1px solid #333",
+                    boxShadow: "0 0 16px rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <Rocket size={13} />
+                  Deploy to Vercel →
+                </motion.a>
+              )}
+            </div>
+
+            {/* ── Env vars */}
+            <div
+              className="rounded-xl border p-3"
+              style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold" style={{ color: "#A3A3A3" }}>⚙️ Required env vars in Vercel</span>
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={handleCopyEnvVars}
+                  className="text-[10px] rounded-md px-2 py-0.5 cursor-pointer transition-colors"
+                  style={{
+                    background: envCopied ? "rgba(16,185,129,0.12)" : "#161616",
+                    color: envCopied ? "#10B981" : "#525252",
+                    border: `1px solid ${envCopied ? "rgba(16,185,129,0.2)" : "#222"}`,
+                  }}
+                >
+                  {envCopied ? "Copied!" : "Copy all"}
+                </motion.button>
+              </div>
+              <div className="flex flex-col gap-1">
+                {REQUIRED_ENV_VARS.map(v => (
+                  <div
+                    key={v}
+                    className="flex items-center gap-2 rounded-md px-2 py-1"
+                    style={{ background: "#0A0A0A" }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#2A2A2A" }} />
+                    <span className="text-[10px] font-mono" style={{ color: "#525252" }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Pre-deploy action buttons */}
       {!isDeployed && (
         <div className="grid grid-cols-2 gap-2 mb-4">
           <motion.button
@@ -1299,7 +1371,7 @@ function DeliveryCard({
             }}
           >
             {isDeploying ? (
-              <><Loader2 size={13} className="animate-spin" /> Deploying…</>
+              <><Loader2 size={13} className="animate-spin" /> Pushing to GitHub…</>
             ) : (
               <><Rocket size={13} /> Connect GitHub &amp; Deploy</>
             )}
