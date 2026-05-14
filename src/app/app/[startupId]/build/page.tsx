@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Square, FileCode2, AlertCircle,
   Download, GitBranch, Rocket, Sparkles,
+  CreditCard, X,
 } from "lucide-react";
 import { BuildIDE } from "@/components/BuildIDE";
 import { supabase } from "@/lib/supabase";
@@ -52,6 +53,10 @@ interface StartupCredentials {
   supabase_project_url: string | null;
   supabase_anon_key: string | null;
   supabase_service_role_key: string | null;
+  stripe_publishable_key: string | null;
+  stripe_secret_key: string | null;
+  razorpay_key_id: string | null;
+  razorpay_key_secret: string | null;
 }
 
 interface BuildState {
@@ -272,7 +277,7 @@ export default function BuildPage() {
             .maybeSingle(),
           supabase
             .from("startup_credentials")
-            .select("supabase_project_url, supabase_anon_key, supabase_service_role_key")
+            .select("supabase_project_url, supabase_anon_key, supabase_service_role_key, stripe_publishable_key, stripe_secret_key, razorpay_key_id, razorpay_key_secret")
             .eq("startup_id", startupId)
             .maybeSingle(),
         ]);
@@ -671,6 +676,20 @@ export default function BuildPage() {
     }
   };
 
+  const handleCredentialsSaved = (updated: Partial<StartupCredentials>) => {
+    setState(prev => ({
+      ...prev,
+      credentials: prev.credentials
+        ? { ...prev.credentials, ...updated }
+        : {
+            supabase_project_url: null, supabase_anon_key: null, supabase_service_role_key: null,
+            stripe_publishable_key: null, stripe_secret_key: null,
+            razorpay_key_id: null, razorpay_key_secret: null,
+            ...updated,
+          },
+    }));
+  };
+
   // ── Derived ───────────────────────────────────────────────────────────────────
 
   const primary = state.colors[1] ?? "#6366F1";
@@ -787,6 +806,7 @@ export default function BuildPage() {
                 rileyDeployStatus={state.steps.riley_deploy}
                 primaryColor={primary}
                 credentials={state.credentials}
+                onCredentialsSaved={handleCredentialsSaved}
               />
             )}
           </AnimatePresence>
@@ -1187,14 +1207,14 @@ function StepCard({
 
 // ── DeliveryCard ──────────────────────────────────────────────────────────────
 
-const REQUIRED_ENV_VARS = [
+const BASE_ENV_VARS = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
-  "STRIPE_SECRET_KEY",
-  "STRIPE_PUBLISHABLE_KEY",
   "NEXT_PUBLIC_SITE_URL",
 ];
+const STRIPE_ENV_VARS    = ["STRIPE_PUBLISHABLE_KEY", "STRIPE_SECRET_KEY"];
+const RAZORPAY_ENV_VARS  = ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET"];
 
 function maskKey(key: string | null | undefined): string | null {
   if (!key) return null;
@@ -1204,7 +1224,7 @@ function maskKey(key: string | null | undefined): string | null {
 function DeliveryCard({
   startupId, fileCount, filePaths, onDeploy, deployError,
   githubUrl, vercelDeployUrl, rileyGithubStatus, rileyDeployStatus, primaryColor,
-  credentials,
+  credentials, onCredentialsSaved,
 }: {
   startupId: string;
   fileCount: number;
@@ -1217,270 +1237,561 @@ function DeliveryCard({
   rileyDeployStatus: StepStatus;
   primaryColor: string;
   credentials: StartupCredentials | null;
+  onCredentialsSaved: (updated: Partial<StartupCredentials>) => void;
 }) {
   const [envCopied, setEnvCopied] = useState(false);
+
+  // Payment modal state
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [payTab, setPayTab] = useState<"stripe" | "razorpay">("stripe");
+  const [stripeForm, setStripeForm] = useState({ pk: "", sk: "" });
+  const [rzpForm, setRzpForm] = useState({ keyId: "", keySecret: "" });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const isDeploying = rileyGithubStatus === "running" || rileyDeployStatus === "running";
   const isDeployed  = rileyGithubStatus === "done";
 
-  // Map each var name → display value (masked) and raw value (for copy)
+  const stripeConnected   = !!(credentials?.stripe_publishable_key);
+  const razorpayConnected = !!(credentials?.razorpay_key_id);
+  const anyPaymentConnected = stripeConnected || razorpayConnected;
+
+  // credMap — maps env var name → display + raw values
   const credMap: Record<string, { display: string | null; raw: string | null }> = {
-    "NEXT_PUBLIC_SUPABASE_URL":      { display: credentials?.supabase_project_url ?? null,              raw: credentials?.supabase_project_url ?? null },
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": { display: maskKey(credentials?.supabase_anon_key),                raw: credentials?.supabase_anon_key ?? null },
-    "SUPABASE_SERVICE_ROLE_KEY":     { display: maskKey(credentials?.supabase_service_role_key),        raw: credentials?.supabase_service_role_key ?? null },
-    "STRIPE_SECRET_KEY":             { display: null, raw: null },
-    "STRIPE_PUBLISHABLE_KEY":        { display: null, raw: null },
+    "NEXT_PUBLIC_SUPABASE_URL":      { display: credentials?.supabase_project_url ?? null,       raw: credentials?.supabase_project_url ?? null },
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": { display: maskKey(credentials?.supabase_anon_key),          raw: credentials?.supabase_anon_key ?? null },
+    "SUPABASE_SERVICE_ROLE_KEY":     { display: maskKey(credentials?.supabase_service_role_key),  raw: credentials?.supabase_service_role_key ?? null },
+    "STRIPE_PUBLISHABLE_KEY":        { display: maskKey(credentials?.stripe_publishable_key),     raw: credentials?.stripe_publishable_key ?? null },
+    "STRIPE_SECRET_KEY":             { display: maskKey(credentials?.stripe_secret_key),          raw: credentials?.stripe_secret_key ?? null },
+    "RAZORPAY_KEY_ID":               { display: maskKey(credentials?.razorpay_key_id),            raw: credentials?.razorpay_key_id ?? null },
+    "RAZORPAY_KEY_SECRET":           { display: maskKey(credentials?.razorpay_key_secret),        raw: credentials?.razorpay_key_secret ?? null },
     "NEXT_PUBLIC_SITE_URL":          { display: null, raw: null },
   };
 
+  // Dynamic var list — base + whichever payment providers are connected
+  const displayVars = [
+    ...BASE_ENV_VARS,
+    ...(stripeConnected ? STRIPE_ENV_VARS : []),
+    ...(razorpayConnected ? RAZORPAY_ENV_VARS : []),
+  ];
+
   const handleCopyEnvVars = () => {
-    const text = REQUIRED_ENV_VARS.map(v => `${v}=${credMap[v]?.raw ?? ""}`).join("\n");
+    const text = displayVars.map(v => `${v}=${credMap[v]?.raw ?? ""}`).join("\n");
     void navigator.clipboard.writeText(text);
     setEnvCopied(true);
     setTimeout(() => setEnvCopied(false), 2000);
   };
 
+  const handleSavePayment = async () => {
+    setSaving(true);
+    setSaveError(null);
+
+    const body: Record<string, string> = {};
+    if (payTab === "stripe") {
+      if (stripeForm.pk.trim()) body.stripe_publishable_key = stripeForm.pk.trim();
+      if (stripeForm.sk.trim()) body.stripe_secret_key = stripeForm.sk.trim();
+    } else {
+      if (rzpForm.keyId.trim()) body.razorpay_key_id = rzpForm.keyId.trim();
+      if (rzpForm.keySecret.trim()) body.razorpay_key_secret = rzpForm.keySecret.trim();
+    }
+
+    if (Object.keys(body).length === 0) {
+      setSaveError("Please enter at least one key.");
+      setSaving(false);
+      return;
+    }
+
+    const res = await fetch(`/api/startups/${startupId}/credentials`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string };
+      setSaveError(data.error ?? "Failed to save");
+      setSaving(false);
+      return;
+    }
+
+    onCredentialsSaved(body as Partial<StartupCredentials>);
+    setShowPaymentModal(false);
+    setSaving(false);
+    if (payTab === "stripe") setStripeForm({ pk: "", sk: "" });
+    else setRzpForm({ keyId: "", keySecret: "" });
+  };
+
+  const openModal = (tab: "stripe" | "razorpay") => {
+    setPayTab(tab);
+    setSaveError(null);
+    setShowPaymentModal(true);
+  };
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      className="rounded-2xl border p-5 mt-1"
-      style={{
-        background: "#111111",
-        borderColor: "rgba(16,185,129,0.22)",
-        boxShadow: "0 0 40px rgba(16,185,129,0.06)",
-      }}
-    >
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-5">
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: "spring", stiffness: 340, damping: 18, delay: 0.12 }}
-          className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0"
-          style={{
-            background: "rgba(16,185,129,0.12)",
-            border: "1px solid rgba(16,185,129,0.25)",
-          }}
-        >
-          ✅
-        </motion.div>
-        <div>
-          <p className="text-sm font-bold" style={{ color: "#F5F5F5" }}>Code Generated</p>
-          <p className="text-xs mt-0.5" style={{ color: "#A3A3A3" }}>
-            {fileCount} files ready to ship
-          </p>
-        </div>
-      </div>
-
-      {/* Deploy error */}
+    <>
+      {/* Payment Keys Modal */}
       <AnimatePresence>
-        {deployError && (
+        {showPaymentModal && (
           <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="rounded-lg border px-3 py-2 mb-4 text-xs"
-            style={{
-              borderColor: "rgba(239,68,68,0.3)",
-              color: "#EF4444",
-              background: "rgba(239,68,68,0.06)",
-            }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(6px)" }}
+            onClick={e => { if (e.target === e.currentTarget) setShowPaymentModal(false); }}
           >
-            {deployError}
+            <motion.div
+              initial={{ scale: 0.93, opacity: 0, y: 12 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.93, opacity: 0, y: 12 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full max-w-sm rounded-2xl border p-5"
+              style={{ background: "#111111", borderColor: "#1F1F1F", boxShadow: "0 0 60px rgba(0,0,0,0.6)" }}
+            >
+              {/* Modal header */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <CreditCard size={14} style={{ color: "#6366F1" }} />
+                  <span className="text-sm font-semibold" style={{ color: "#F5F5F5" }}>Add Payment Keys</span>
+                </div>
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="rounded-lg p-1.5 cursor-pointer transition-colors"
+                  style={{ color: "#525252", background: "#161616", border: "1px solid #1A1A1A" }}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex gap-1 p-1 rounded-xl mb-4" style={{ background: "#0D0D0D" }}>
+                {(["stripe", "razorpay"] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => { setPayTab(tab); setSaveError(null); }}
+                    className="flex-1 py-1.5 text-xs font-medium rounded-lg cursor-pointer transition-all"
+                    style={{
+                      background: payTab === tab ? "#1F1F1F" : "transparent",
+                      color: payTab === tab ? "#F5F5F5" : "#525252",
+                      border: payTab === tab ? "1px solid #2A2A2A" : "1px solid transparent",
+                    }}
+                  >
+                    {tab === "stripe" ? "Stripe" : "Razorpay"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Stripe form */}
+              {payTab === "stripe" && (
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="text-[10px] font-medium mb-1.5 block" style={{ color: "#A3A3A3" }}>Publishable Key</label>
+                    <input
+                      type="text"
+                      placeholder="pk_live_... or pk_test_..."
+                      value={stripeForm.pk}
+                      onChange={e => setStripeForm(f => ({ ...f, pk: e.target.value }))}
+                      className="w-full text-xs rounded-lg px-3 py-2 font-mono outline-none"
+                      style={{ background: "#0D0D0D", border: "1px solid #1F1F1F", color: "#F5F5F5" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-medium mb-1.5 block" style={{ color: "#A3A3A3" }}>Secret Key</label>
+                    <input
+                      type="password"
+                      placeholder="sk_live_... or sk_test_..."
+                      value={stripeForm.sk}
+                      onChange={e => setStripeForm(f => ({ ...f, sk: e.target.value }))}
+                      className="w-full text-xs rounded-lg px-3 py-2 font-mono outline-none"
+                      style={{ background: "#0D0D0D", border: "1px solid #1F1F1F", color: "#F5F5F5" }}
+                    />
+                  </div>
+                  <a
+                    href="https://dashboard.stripe.com/apikeys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[10px] transition-opacity hover:opacity-70"
+                    style={{ color: "#525252" }}
+                  >
+                    <ExternalLink size={9} />
+                    Get keys from dashboard.stripe.com/apikeys
+                  </a>
+                </div>
+              )}
+
+              {/* Razorpay form */}
+              {payTab === "razorpay" && (
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="text-[10px] font-medium mb-1.5 block" style={{ color: "#A3A3A3" }}>Key ID</label>
+                    <input
+                      type="text"
+                      placeholder="rzp_live_... or rzp_test_..."
+                      value={rzpForm.keyId}
+                      onChange={e => setRzpForm(f => ({ ...f, keyId: e.target.value }))}
+                      className="w-full text-xs rounded-lg px-3 py-2 font-mono outline-none"
+                      style={{ background: "#0D0D0D", border: "1px solid #1F1F1F", color: "#F5F5F5" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-medium mb-1.5 block" style={{ color: "#A3A3A3" }}>Key Secret</label>
+                    <input
+                      type="password"
+                      placeholder="Key secret"
+                      value={rzpForm.keySecret}
+                      onChange={e => setRzpForm(f => ({ ...f, keySecret: e.target.value }))}
+                      className="w-full text-xs rounded-lg px-3 py-2 font-mono outline-none"
+                      style={{ background: "#0D0D0D", border: "1px solid #1F1F1F", color: "#F5F5F5" }}
+                    />
+                  </div>
+                  <a
+                    href="https://dashboard.razorpay.com/app/keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[10px] transition-opacity hover:opacity-70"
+                    style={{ color: "#525252" }}
+                  >
+                    <ExternalLink size={9} />
+                    Get keys from dashboard.razorpay.com/app/keys
+                  </a>
+                </div>
+              )}
+
+              {/* Error */}
+              <AnimatePresence>
+                {saveError && (
+                  <motion.p
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="text-[10px] mt-3 rounded-lg px-2.5 py-2"
+                    style={{ background: "rgba(239,68,68,0.08)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.15)" }}
+                  >
+                    {saveError}
+                  </motion.p>
+                )}
+              </AnimatePresence>
+
+              {/* Save button */}
+              <motion.button
+                whileHover={!saving ? { scale: 1.02 } : {}}
+                whileTap={!saving ? { scale: 0.97 } : {}}
+                onClick={() => void handleSavePayment()}
+                disabled={saving}
+                className="w-full mt-4 py-2.5 rounded-xl text-xs font-semibold disabled:opacity-60 cursor-pointer flex items-center justify-center gap-2"
+                style={{
+                  background: "#6366F1",
+                  color: "#fff",
+                  boxShadow: saving ? "none" : "0 0 20px rgba(99,102,241,0.28)",
+                }}
+              >
+                {saving ? <><Loader2 size={12} className="animate-spin" /> Saving…</> : "Save Keys"}
+              </motion.button>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Post-deploy: GitHub + Vercel + env vars */}
-      <AnimatePresence>
-        {isDeployed && (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="rounded-2xl border p-5 mt-1"
+        style={{
+          background: "#111111",
+          borderColor: "rgba(16,185,129,0.22)",
+          boxShadow: "0 0 40px rgba(16,185,129,0.06)",
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-5">
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="flex flex-col gap-3 mb-4"
-          >
-            {/* ── GitHub */}
-            <div
-              className="rounded-xl border p-3"
-              style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-semibold" style={{ color: "#10B981" }}>✅ Code pushed to GitHub</span>
-              </div>
-              {githubUrl && (
-                <a
-                  href={githubUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-lg border px-3 py-2 transition-opacity hover:opacity-80"
-                  style={{ borderColor: "#1A1A1A", background: "#111111" }}
-                >
-                  <GitBranch size={12} style={{ color: "#525252", flexShrink: 0 }} />
-                  <span className="flex-1 text-xs font-mono truncate" style={{ color: "#A3A3A3" }}>
-                    {githubUrl.replace("https://github.com/", "")}
-                  </span>
-                  <ExternalLink size={10} style={{ color: "#525252", flexShrink: 0 }} />
-                </a>
-              )}
-            </div>
-
-            {/* ── Vercel */}
-            <div
-              className="rounded-xl border p-3"
-              style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-semibold" style={{ color: "#F5F5F5" }}>🚀 Deploy to Vercel</span>
-              </div>
-              <p className="text-[11px] mb-3" style={{ color: "#525252" }}>
-                Click below to deploy to <span style={{ color: "#A3A3A3" }}>your own</span> Vercel account — free, takes ~60 seconds
-              </p>
-              {vercelDeployUrl && (
-                <motion.a
-                  href={vercelDeployUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold transition-opacity hover:opacity-90"
-                  style={{
-                    background: "#000",
-                    color: "#fff",
-                    border: "1px solid #333",
-                    boxShadow: "0 0 16px rgba(255,255,255,0.06)",
-                  }}
-                >
-                  <Rocket size={13} />
-                  Deploy to Vercel →
-                </motion.a>
-              )}
-            </div>
-
-            {/* ── Env vars */}
-            <div
-              className="rounded-xl border p-3"
-              style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold" style={{ color: "#A3A3A3" }}>⚙️ Required env vars in Vercel</span>
-                <motion.button
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={handleCopyEnvVars}
-                  className="text-[10px] rounded-md px-2 py-0.5 cursor-pointer transition-colors"
-                  style={{
-                    background: envCopied ? "rgba(16,185,129,0.12)" : "#161616",
-                    color: envCopied ? "#10B981" : "#525252",
-                    border: `1px solid ${envCopied ? "rgba(16,185,129,0.2)" : "#222"}`,
-                  }}
-                >
-                  {envCopied ? "Copied!" : "Copy all"}
-                </motion.button>
-              </div>
-
-              {/* Connect Supabase CTA if not yet connected */}
-              {!credentials && (
-                <motion.a
-                  href={`/api/auth/supabase?startupId=${startupId}`}
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 mb-2 text-xs font-medium cursor-pointer transition-opacity hover:opacity-90"
-                  style={{
-                    background: "rgba(99,102,241,0.1)",
-                    color: "#818CF8",
-                    border: "1px solid rgba(99,102,241,0.25)",
-                  }}
-                >
-                  <Sparkles size={11} />
-                  Connect Supabase — auto-fill these values
-                </motion.a>
-              )}
-
-              {/* Var list */}
-              <div className="flex flex-col gap-1">
-                {REQUIRED_ENV_VARS.map(v => {
-                  const entry = credMap[v];
-                  const filled = !!entry?.display;
-                  return (
-                    <div
-                      key={v}
-                      className="flex items-center gap-2 rounded-md px-2 py-1"
-                      style={{ background: "#0A0A0A" }}
-                    >
-                      <span
-                        className="w-1.5 h-1.5 rounded-full shrink-0"
-                        style={{ background: filled ? "#10B981" : "#2A2A2A" }}
-                      />
-                      <span className="text-[10px] font-mono flex-1 truncate" style={{ color: filled ? "#A3A3A3" : "#525252" }}>
-                        {v}
-                      </span>
-                      {filled && (
-                        <span className="text-[9px] font-mono shrink-0" style={{ color: "#3A5A3A" }}>
-                          {entry.display}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {credentials && (
-                <p className="text-[9px] mt-2" style={{ color: "#2A2A2A" }}>
-                  ✓ Supabase keys auto-filled · values shown masked
-                </p>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Pre-deploy action buttons */}
-      {!isDeployed && (
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => { window.location.href = `/api/startups/${startupId}/download`; }}
-            className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold border cursor-pointer"
-            style={{ borderColor: "#1F1F1F", color: "#A3A3A3", background: "#0D0D0D" }}
-          >
-            <Download size={13} />
-            Download ZIP
-          </motion.button>
-
-          <motion.button
-            whileHover={!isDeploying ? { scale: 1.02 } : {}}
-            whileTap={!isDeploying ? { scale: 0.97 } : {}}
-            onClick={onDeploy}
-            disabled={isDeploying}
-            className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold disabled:opacity-60 cursor-pointer"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 340, damping: 18, delay: 0.12 }}
+            className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0"
             style={{
-              background: primaryColor,
-              color: "#fff",
-              boxShadow: isDeploying ? "none" : `0 0 16px ${primaryColor}40`,
+              background: "rgba(16,185,129,0.12)",
+              border: "1px solid rgba(16,185,129,0.25)",
             }}
           >
-            {isDeploying ? (
-              <><Loader2 size={13} className="animate-spin" /> Pushing to GitHub…</>
-            ) : (
-              <><Rocket size={13} /> Connect GitHub &amp; Deploy</>
-            )}
-          </motion.button>
+            ✅
+          </motion.div>
+          <div>
+            <p className="text-sm font-bold" style={{ color: "#F5F5F5" }}>Code Generated</p>
+            <p className="text-xs mt-0.5" style={{ color: "#A3A3A3" }}>
+              {fileCount} files ready to ship
+            </p>
+          </div>
         </div>
-      )}
 
-      {/* Generated file list */}
-      {filePaths.length > 0 && <FileList paths={filePaths} />}
+        {/* Deploy error */}
+        <AnimatePresence>
+          {deployError && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="rounded-lg border px-3 py-2 mb-4 text-xs"
+              style={{
+                borderColor: "rgba(239,68,68,0.3)",
+                color: "#EF4444",
+                background: "rgba(239,68,68,0.06)",
+              }}
+            >
+              {deployError}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      <div className="pt-3 mt-3 border-t" style={{ borderColor: "#1A1A1A" }}>
-        <Link href={`/app/${startupId}`} className="text-xs" style={{ color: "#525252" }}>
-          ← Back to report
-        </Link>
-      </div>
-    </motion.div>
+        {/* Post-deploy: GitHub + Vercel + env vars */}
+        <AnimatePresence>
+          {isDeployed && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="flex flex-col gap-3 mb-4"
+            >
+              {/* ── GitHub */}
+              <div
+                className="rounded-xl border p-3"
+                style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-semibold" style={{ color: "#10B981" }}>✅ Code pushed to GitHub</span>
+                </div>
+                {githubUrl && (
+                  <a
+                    href={githubUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 rounded-lg border px-3 py-2 transition-opacity hover:opacity-80"
+                    style={{ borderColor: "#1A1A1A", background: "#111111" }}
+                  >
+                    <GitBranch size={12} style={{ color: "#525252", flexShrink: 0 }} />
+                    <span className="flex-1 text-xs font-mono truncate" style={{ color: "#A3A3A3" }}>
+                      {githubUrl.replace("https://github.com/", "")}
+                    </span>
+                    <ExternalLink size={10} style={{ color: "#525252", flexShrink: 0 }} />
+                  </a>
+                )}
+              </div>
+
+              {/* ── Vercel */}
+              <div
+                className="rounded-xl border p-3"
+                style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold" style={{ color: "#F5F5F5" }}>🚀 Deploy to Vercel</span>
+                </div>
+                <p className="text-[11px] mb-3" style={{ color: "#525252" }}>
+                  Click below to deploy to <span style={{ color: "#A3A3A3" }}>your own</span> Vercel account — free, takes ~60 seconds
+                </p>
+                {vercelDeployUrl && (
+                  <motion.a
+                    href={vercelDeployUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold transition-opacity hover:opacity-90"
+                    style={{
+                      background: "#000",
+                      color: "#fff",
+                      border: "1px solid #333",
+                      boxShadow: "0 0 16px rgba(255,255,255,0.06)",
+                    }}
+                  >
+                    <Rocket size={13} />
+                    Deploy to Vercel →
+                  </motion.a>
+                )}
+              </div>
+
+              {/* ── Env vars */}
+              <div
+                className="rounded-xl border p-3"
+                style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold" style={{ color: "#A3A3A3" }}>⚙️ Required env vars in Vercel</span>
+                  <motion.button
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
+                    onClick={handleCopyEnvVars}
+                    className="text-[10px] rounded-md px-2 py-0.5 cursor-pointer transition-colors"
+                    style={{
+                      background: envCopied ? "rgba(16,185,129,0.12)" : "#161616",
+                      color: envCopied ? "#10B981" : "#525252",
+                      border: `1px solid ${envCopied ? "rgba(16,185,129,0.2)" : "#222"}`,
+                    }}
+                  >
+                    {envCopied ? "Copied!" : "Copy all"}
+                  </motion.button>
+                </div>
+
+                {/* Connect Supabase CTA */}
+                {!credentials && (
+                  <motion.a
+                    href={`/api/auth/supabase?startupId=${startupId}`}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 mb-2 text-xs font-medium cursor-pointer transition-opacity hover:opacity-90"
+                    style={{
+                      background: "rgba(99,102,241,0.1)",
+                      color: "#818CF8",
+                      border: "1px solid rgba(99,102,241,0.25)",
+                    }}
+                  >
+                    <Sparkles size={11} />
+                    Connect Supabase — auto-fill these values
+                  </motion.a>
+                )}
+
+                {/* Payment keys — connected status chips + Add/Edit button */}
+                <div className="flex flex-col gap-1.5 mb-2">
+                  {stripeConnected && (
+                    <div
+                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+                      style={{ background: "rgba(16,185,129,0.07)", color: "#10B981", border: "1px solid rgba(16,185,129,0.18)" }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#10B981" }} />
+                      <span className="flex-1 font-medium">Stripe · {maskKey(credentials?.stripe_publishable_key)}</span>
+                      <button
+                        onClick={() => openModal("stripe")}
+                        className="text-[9px] cursor-pointer transition-opacity hover:opacity-70"
+                        style={{ color: "#525252" }}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  )}
+                  {razorpayConnected && (
+                    <div
+                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+                      style={{ background: "rgba(16,185,129,0.07)", color: "#10B981", border: "1px solid rgba(16,185,129,0.18)" }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#10B981" }} />
+                      <span className="flex-1 font-medium">Razorpay · {maskKey(credentials?.razorpay_key_id)}</span>
+                      <button
+                        onClick={() => openModal("razorpay")}
+                        className="text-[9px] cursor-pointer transition-opacity hover:opacity-70"
+                        style={{ color: "#525252" }}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  )}
+                  <motion.button
+                    onClick={() => openModal(!stripeConnected ? "stripe" : "razorpay")}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium cursor-pointer transition-opacity hover:opacity-90"
+                    style={{
+                      background: anyPaymentConnected ? "#0D0D0D" : "rgba(99,102,241,0.07)",
+                      color: anyPaymentConnected ? "#525252" : "#A5B4FC",
+                      border: `1px solid ${anyPaymentConnected ? "#1A1A1A" : "rgba(99,102,241,0.2)"}`,
+                    }}
+                  >
+                    <CreditCard size={11} />
+                    {anyPaymentConnected
+                      ? (!stripeConnected || !razorpayConnected)
+                        ? `Add ${!stripeConnected ? "Stripe" : "Razorpay"} keys`
+                        : "Edit payment keys"
+                      : "Add Payment Keys — Stripe or Razorpay"}
+                  </motion.button>
+                </div>
+
+                {/* Var list */}
+                <div className="flex flex-col gap-1">
+                  {displayVars.map(v => {
+                    const entry = credMap[v];
+                    const filled = !!entry?.display;
+                    return (
+                      <div
+                        key={v}
+                        className="flex items-center gap-2 rounded-md px-2 py-1"
+                        style={{ background: "#0A0A0A" }}
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{ background: filled ? "#10B981" : "#2A2A2A" }}
+                        />
+                        <span className="text-[10px] font-mono flex-1 truncate" style={{ color: filled ? "#A3A3A3" : "#525252" }}>
+                          {v}
+                        </span>
+                        {filled && (
+                          <span className="text-[9px] font-mono shrink-0" style={{ color: "#3A5A3A" }}>
+                            {entry.display}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {(credentials || anyPaymentConnected) && (
+                  <p className="text-[9px] mt-2" style={{ color: "#2A2A2A" }}>
+                    {[
+                      credentials && "✓ Supabase",
+                      stripeConnected && "✓ Stripe",
+                      razorpayConnected && "✓ Razorpay",
+                    ].filter(Boolean).join(" · ")} · values shown masked
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Pre-deploy action buttons */}
+        {!isDeployed && (
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => { window.location.href = `/api/startups/${startupId}/download`; }}
+              className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold border cursor-pointer"
+              style={{ borderColor: "#1F1F1F", color: "#A3A3A3", background: "#0D0D0D" }}
+            >
+              <Download size={13} />
+              Download ZIP
+            </motion.button>
+
+            <motion.button
+              whileHover={!isDeploying ? { scale: 1.02 } : {}}
+              whileTap={!isDeploying ? { scale: 0.97 } : {}}
+              onClick={onDeploy}
+              disabled={isDeploying}
+              className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold disabled:opacity-60 cursor-pointer"
+              style={{
+                background: primaryColor,
+                color: "#fff",
+                boxShadow: isDeploying ? "none" : `0 0 16px ${primaryColor}40`,
+              }}
+            >
+              {isDeploying ? (
+                <><Loader2 size={13} className="animate-spin" /> Pushing to GitHub…</>
+              ) : (
+                <><Rocket size={13} /> Connect GitHub &amp; Deploy</>
+              )}
+            </motion.button>
+          </div>
+        )}
+
+        {/* Generated file list */}
+        {filePaths.length > 0 && <FileList paths={filePaths} />}
+
+        <div className="pt-3 mt-3 border-t" style={{ borderColor: "#1A1A1A" }}>
+          <Link href={`/app/${startupId}`} className="text-xs" style={{ color: "#525252" }}>
+            ← Back to report
+          </Link>
+        </div>
+      </motion.div>
+    </>
   );
 }
 
