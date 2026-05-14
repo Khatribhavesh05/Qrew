@@ -86,51 +86,70 @@ export async function generateLandingPage(
 
   const prompt = `Create a stunning, production-ready Next.js landing page for "${brain.startup_name}".
 
+This is a PREMIUM startup website. Every section must look unique and custom-designed for this specific brand.
+
 STARTUP CONTEXT:
 - Industry: ${brain.tech_stack ?? "SaaS"}
 - Target audience: ${brain.audience.slice(0, 100)}
 - Brand vibe: ${brain.brand_vibe.slice(0, 100)}
 - Key value proposition: ${brain.idea.slice(0, 200)}
 
-BRAND IDENTITY:
+BRAND IDENTITY — define these in a <style> tag or global CSS :root block at the top of the component:
+\`:root {
+  ${cssVars}
+}\`
 - Primary color: ${primary}
 - Secondary color: ${secondary}
 - Accent color: ${accent}
 - Display font: "${displayFont}" — use this for ALL headings and hero text (import from Google Fonts)
 - Body font: "${bodyFont}" — use this for paragraphs and UI text (import from Google Fonts)
-- CSS custom properties to define in :root { ${cssVars} }
 
 LAYOUT INSTRUCTION (based on brand vibe "${brain.brand_vibe}"):
 ${layoutInstruction}
 
-HERO BACKGROUND — CRITICAL:
+HERO BACKGROUND — CRITICAL — COPY THIS EXACTLY INTO YOUR JSX:
 ${fluxBg
-  ? `- Set the hero section style: backgroundImage: "url('${fluxBg}')", backgroundSize: "cover", backgroundPosition: "center"
-- Layer a dark overlay div with background: "rgba(0,0,0,0.6)" on top so all text is fully readable
-- Do NOT use a gradient in place of this image URL`
-  : `- flux_bg_url is empty — use an animated CSS mesh gradient hero instead using the brand colors above`}
+  ? `The hero section MUST use this exact inline style object — do not paraphrase, do not omit the URL:
+  style={{
+    backgroundImage: "url('${fluxBg}')",
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat",
+    minHeight: "100vh",
+    position: "relative",
+  }}
+Inside the hero, add a dark overlay as the first child element:
+  <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)" }} />
+This overlay ensures text readability. All hero text goes AFTER this overlay div (use position: relative and z-index: 1).
+DO NOT replace this backgroundImage with a gradient. The URL must appear literally in the rendered JSX.`
+  : `flux_bg_url is empty — use an animated CSS mesh gradient hero using the brand colors above`}
 ${fluxTexture
-  ? `- Apply "${fluxTexture}" as a subtle noise texture overlay across the ENTIRE page at 5% opacity using a fixed position pseudo-element or wrapper div`
+  ? `TEXTURE OVERLAY: Apply this URL as a noise texture across the ENTIRE page at 5% opacity using a fixed-position wrapper div as the very first element inside the root:
+  <div style={{ position: "fixed", inset: 0, backgroundImage: "url('${fluxTexture}')", opacity: 0.05, pointerEvents: "none", zIndex: 0 }} />`
   : ""}
 
 REQUIRED SECTIONS (in order):
 1. Navigation — Logo + startup name left, CTA button right
-2. Hero — Full viewport, background as specified above, startup name as H1 in ${displayFont}, one-line value prop, two CTA buttons (primary + secondary)
-3. Features — 3 features with Lucide icons, relevant to this specific product
-4. Social proof — 3 testimonial cards with real-sounding names and quotes
+2. Hero — Full viewport, background EXACTLY as specified above, startup name as H1 in ${displayFont}, one-line value prop, two CTA buttons (primary + secondary)
+3. Features — 3 features with Lucide icons, relevant to this specific product, each with a unique layout (not a uniform 3-column card grid)
+4. Social proof — 3 testimonial cards with real-sounding names and quotes specific to this product's value
 5. Pricing — Free tier + Pro tier with feature list
 6. Final CTA — bold conversion section with email waitlist form
 7. Footer — minimal, links
 
-ANTI-SLOP RULES:
-- NEVER use generic purple/blue gradients — use ${primary} and ${secondary} only
-- NEVER "Acme Corp" or "Company" — always "${brain.startup_name}"
-- NEVER Inter as the heading font — must use "${displayFont}" for all headings
-- NEVER empty placeholder text — write real copy for this exact startup
-- NEVER boring hover states — unique micro-interactions on every interactive element
-- ALWAYS Framer Motion: fadeInUp with staggerChildren for each section
+HARD BANS — violating any of these makes the output unacceptable:
+- DO NOT use purple gradients or blue-to-purple gradients anywhere — use ${primary} and ${secondary} only
+- DO NOT use Inter as the only font — "${displayFont}" is REQUIRED for every heading, hero text, and display element
+- DO NOT use generic card layouts where every section looks the same (3 equal cards side by side)
+- DO NOT use "Acme Corp", "Company", or any placeholder name — always "${brain.startup_name}"
+- DO NOT use empty placeholder text — write real, specific copy for this exact startup and its audience
+- DO NOT use boring hover states — every interactive element needs a unique micro-interaction
+
+REQUIRED QUALITY BARS:
+- ALWAYS Framer Motion: fadeInUp with staggerChildren for every section reveal
 - ALWAYS fully mobile responsive with proper breakpoints
-- ALWAYS dark theme unless brand palette is light
+- ALWAYS dark theme unless brand palette is explicitly light
+- ALWAYS write copy as if you are the startup's actual marketing team
 
 Return ONLY the complete TypeScript React component code. No explanation. No markdown fences. Start directly with "use client";`;
 
