@@ -37,20 +37,35 @@ export async function GET(request: NextRequest) {
 
         const { data: existing } = await admin
           .from("profiles")
-          .select("id")
+          .select("id, credits_balance, created_at")
           .eq("id", data.user.id)
           .single();
 
         if (!existing) {
+          // Trigger didn't fire — create profile manually
           const { error: insertErr } = await admin.from("profiles").insert({
             id: data.user.id,
             email: data.user.email,
             token_balance: 100000,
-            credits_balance: 2, // 2 free credits on signup
+            credits_balance: 2,
             free_build_used: false,
           });
           if (insertErr) console.error("[Auth] Profile insert error:", insertErr.message);
           else console.log("[Auth] Profile created for new user:", data.user.email);
+        } else {
+          // Profile already exists — likely created by the Postgres trigger
+          // (which fires before this callback runs). If it was just created
+          // and has 0 credits, grant the 2 free signup credits now.
+          const ageMs = Date.now() - new Date(existing.created_at as string).getTime();
+          const isNewSignup = Number(existing.credits_balance) === 0 && ageMs < 30_000;
+          if (isNewSignup) {
+            const { error: updateErr } = await admin
+              .from("profiles")
+              .update({ credits_balance: 2 })
+              .eq("id", data.user.id);
+            if (updateErr) console.error("[Auth] Credits grant error:", updateErr.message);
+            else console.log("[Auth] Granted 2 signup credits to:", data.user.email);
+          }
         }
       } catch (profileErr) {
         // Non-fatal — user can still proceed
