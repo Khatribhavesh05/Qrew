@@ -48,6 +48,12 @@ interface SseEvent {
   message?: string;
 }
 
+interface StartupCredentials {
+  supabase_project_url: string | null;
+  supabase_anon_key: string | null;
+  supabase_service_role_key: string | null;
+}
+
 interface BuildState {
   phase: Phase;
   steps: Record<GenStepId, StepStatus>;
@@ -68,6 +74,7 @@ interface BuildState {
   githubUrl: string;
   vercelDeployUrl: string;
   fileMap: Record<string, string>;
+  credentials: StartupCredentials | null;
 }
 
 // ── Step definitions ──────────────────────────────────────────────────────────
@@ -201,6 +208,7 @@ export default function BuildPage() {
     githubUrl: "",
     vercelDeployUrl: "",
     fileMap: {},
+    credentials: null,
   });
 
   // initDone gates the SSE start — stays false until we know what mode we're in
@@ -256,14 +264,22 @@ export default function BuildPage() {
 
       // ── Case 1: already built — show delivery card from code_maps ────────────
       if (status === "built") {
-        const { data: codeMap } = await supabase
-          .from("code_maps")
-          .select("file_map")
-          .eq("startup_id", startupId)
-          .maybeSingle();
+        const [{ data: codeMap }, { data: credData }] = await Promise.all([
+          supabase
+            .from("code_maps")
+            .select("file_map")
+            .eq("startup_id", startupId)
+            .maybeSingle(),
+          supabase
+            .from("startup_credentials")
+            .select("supabase_project_url, supabase_anon_key, supabase_service_role_key")
+            .eq("startup_id", startupId)
+            .maybeSingle(),
+        ]);
 
         const fileMap = (codeMap?.file_map ?? {}) as Record<string, string>;
         const filePaths = Object.keys(fileMap);
+        const credentials = (credData as StartupCredentials | null);
 
         startedRef.current = true; // block SSE
         setState(prev => ({
@@ -281,6 +297,7 @@ export default function BuildPage() {
           fileCount: filePaths.length,
           filePaths,
           fileMap,
+          credentials,
           steps: {
             ...INITIAL_STEPS,
             jordan: "done",
@@ -345,14 +362,22 @@ export default function BuildPage() {
             clearInterval(pollRef.current!);
             pollRef.current = null;
 
-            const { data: codeMap } = await supabase
-              .from("code_maps")
-              .select("file_map")
-              .eq("startup_id", startupId)
-              .maybeSingle();
+            const [{ data: codeMap }, { data: credData }] = await Promise.all([
+              supabase
+                .from("code_maps")
+                .select("file_map")
+                .eq("startup_id", startupId)
+                .maybeSingle(),
+              supabase
+                .from("startup_credentials")
+                .select("supabase_project_url, supabase_anon_key, supabase_service_role_key")
+                .eq("startup_id", startupId)
+                .maybeSingle(),
+            ]);
 
             const fileMap = (codeMap?.file_map ?? {}) as Record<string, string>;
             const filePaths = Object.keys(fileMap);
+            const credentials = (credData as StartupCredentials | null);
 
             setState(prev => ({
               ...prev,
@@ -360,6 +385,7 @@ export default function BuildPage() {
               fileCount: filePaths.length,
               filePaths,
               fileMap,
+              credentials,
               steps: {
                 ...prev.steps,
                 jordan: "done",
@@ -530,15 +556,23 @@ export default function BuildPage() {
                   morgan_review: "done",
                 },
               }));
-              // Fetch full file map for WebContainer preview
+              // Fetch full file map + credentials when SSE build completes
               void (async () => {
-                const { data: codeMap } = await supabase
-                  .from("code_maps")
-                  .select("file_map")
-                  .eq("startup_id", startupId)
-                  .maybeSingle();
+                const [{ data: codeMap }, { data: credData }] = await Promise.all([
+                  supabase
+                    .from("code_maps")
+                    .select("file_map")
+                    .eq("startup_id", startupId)
+                    .maybeSingle(),
+                  supabase
+                    .from("startup_credentials")
+                    .select("supabase_project_url, supabase_anon_key, supabase_service_role_key")
+                    .eq("startup_id", startupId)
+                    .maybeSingle(),
+                ]);
                 const fileMap = (codeMap?.file_map ?? {}) as Record<string, string>;
-                setState(prev => ({ ...prev, fileMap }));
+                const credentials = (credData as StartupCredentials | null);
+                setState(prev => ({ ...prev, fileMap, credentials }));
               })();
             }
 
@@ -752,6 +786,7 @@ export default function BuildPage() {
                 rileyGithubStatus={state.steps.riley_github}
                 rileyDeployStatus={state.steps.riley_deploy}
                 primaryColor={primary}
+                credentials={state.credentials}
               />
             )}
           </AnimatePresence>
@@ -1161,9 +1196,15 @@ const REQUIRED_ENV_VARS = [
   "NEXT_PUBLIC_SITE_URL",
 ];
 
+function maskKey(key: string | null | undefined): string | null {
+  if (!key) return null;
+  return key.slice(0, 8) + "•".repeat(16);
+}
+
 function DeliveryCard({
   startupId, fileCount, filePaths, onDeploy, deployError,
   githubUrl, vercelDeployUrl, rileyGithubStatus, rileyDeployStatus, primaryColor,
+  credentials,
 }: {
   startupId: string;
   fileCount: number;
@@ -1175,14 +1216,26 @@ function DeliveryCard({
   rileyGithubStatus: StepStatus;
   rileyDeployStatus: StepStatus;
   primaryColor: string;
+  credentials: StartupCredentials | null;
 }) {
   const [envCopied, setEnvCopied] = useState(false);
 
   const isDeploying = rileyGithubStatus === "running" || rileyDeployStatus === "running";
   const isDeployed  = rileyGithubStatus === "done";
 
+  // Map each var name → display value (masked) and raw value (for copy)
+  const credMap: Record<string, { display: string | null; raw: string | null }> = {
+    "NEXT_PUBLIC_SUPABASE_URL":      { display: credentials?.supabase_project_url ?? null,              raw: credentials?.supabase_project_url ?? null },
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": { display: maskKey(credentials?.supabase_anon_key),                raw: credentials?.supabase_anon_key ?? null },
+    "SUPABASE_SERVICE_ROLE_KEY":     { display: maskKey(credentials?.supabase_service_role_key),        raw: credentials?.supabase_service_role_key ?? null },
+    "STRIPE_SECRET_KEY":             { display: null, raw: null },
+    "STRIPE_PUBLISHABLE_KEY":        { display: null, raw: null },
+    "NEXT_PUBLIC_SITE_URL":          { display: null, raw: null },
+  };
+
   const handleCopyEnvVars = () => {
-    void navigator.clipboard.writeText(REQUIRED_ENV_VARS.map(v => `${v}=`).join("\n"));
+    const text = REQUIRED_ENV_VARS.map(v => `${v}=${credMap[v]?.raw ?? ""}`).join("\n");
+    void navigator.clipboard.writeText(text);
     setEnvCopied(true);
     setTimeout(() => setEnvCopied(false), 2000);
   };
@@ -1327,18 +1380,58 @@ function DeliveryCard({
                   {envCopied ? "Copied!" : "Copy all"}
                 </motion.button>
               </div>
+
+              {/* Connect Supabase CTA if not yet connected */}
+              {!credentials && (
+                <motion.a
+                  href={`/api/auth/supabase?startupId=${startupId}`}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 mb-2 text-xs font-medium cursor-pointer transition-opacity hover:opacity-90"
+                  style={{
+                    background: "rgba(99,102,241,0.1)",
+                    color: "#818CF8",
+                    border: "1px solid rgba(99,102,241,0.25)",
+                  }}
+                >
+                  <Sparkles size={11} />
+                  Connect Supabase — auto-fill these values
+                </motion.a>
+              )}
+
+              {/* Var list */}
               <div className="flex flex-col gap-1">
-                {REQUIRED_ENV_VARS.map(v => (
-                  <div
-                    key={v}
-                    className="flex items-center gap-2 rounded-md px-2 py-1"
-                    style={{ background: "#0A0A0A" }}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#2A2A2A" }} />
-                    <span className="text-[10px] font-mono" style={{ color: "#525252" }}>{v}</span>
-                  </div>
-                ))}
+                {REQUIRED_ENV_VARS.map(v => {
+                  const entry = credMap[v];
+                  const filled = !!entry?.display;
+                  return (
+                    <div
+                      key={v}
+                      className="flex items-center gap-2 rounded-md px-2 py-1"
+                      style={{ background: "#0A0A0A" }}
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ background: filled ? "#10B981" : "#2A2A2A" }}
+                      />
+                      <span className="text-[10px] font-mono flex-1 truncate" style={{ color: filled ? "#A3A3A3" : "#525252" }}>
+                        {v}
+                      </span>
+                      {filled && (
+                        <span className="text-[9px] font-mono shrink-0" style={{ color: "#3A5A3A" }}>
+                          {entry.display}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
+
+              {credentials && (
+                <p className="text-[9px] mt-2" style={{ color: "#2A2A2A" }}>
+                  ✓ Supabase keys auto-filled · values shown masked
+                </p>
+              )}
             </div>
           </motion.div>
         )}
