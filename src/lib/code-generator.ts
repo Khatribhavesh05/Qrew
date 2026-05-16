@@ -108,7 +108,7 @@ Body Font (paragraphs, UI text): "${bodyFont}"
 Import at the top of your component:
 import { ${displayFont.replace(/\s+/g, "_")}, ${bodyFont.replace(/\s+/g, "_")} } from "next/font/google";
 
-const displayFont = ${displayFont.replace(/\s+/g, "_")}({ subsets: ["latin"], weight: ["700", "800"] });
+const displayFont = ${displayFont.replace(/\s+/g, "_")}({ subsets: ["latin"], weight: ["600", "700"] });
 const bodyFont = ${bodyFont.replace(/\s+/g, "_")}({ subsets: ["latin"], weight: ["400", "500", "600"] });
 
 Apply fonts:

@@ -12,7 +12,6 @@ import {
   Download, GitBranch, Rocket, Sparkles,
   CreditCard, X,
 } from "lucide-react";
-import { ProfessionalIDE } from "@/components/ProfessionalIDE";
 import { supabase } from "@/lib/supabase";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -220,8 +219,6 @@ export default function BuildPage() {
   const [initDone, setInitDone] = useState(false);
   // File activity feed — most-recent first, populated from SSE code_chunk events
   const [recentFiles, setRecentFiles] = useState<string[]>([]);
-  // Show/hide build steps panel
-  const [showStepsPanel, setShowStepsPanel] = useState(true);
 
   const abortRef = useRef<AbortController | null>(null);
   const startedRef = useRef(false);
@@ -719,149 +716,119 @@ export default function BuildPage() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Left panel — Build Steps (collapsible when complete) */}
-        {(showStepsPanel || state.phase !== "complete") && (
-          <div className="flex-[3] overflow-y-auto p-5 flex flex-col gap-3 min-w-0 border-r" style={{ borderColor: "#1F1F1F" }}>
-            {STEPS.map(step => (
-              <StepCard
-                key={step.id}
-                step={step}
-                status={state.steps[step.id]}
-                code={state.stepCode[step.id] ?? ""}
-                files={state.stepFiles[step.id] ?? []}
-                currentFile={state.stepCurrentFile[step.id]}
-                fileContents={state.stepFileContents[step.id] ?? {}}
-                primaryColor={primary}
-              />
-            ))}
+        {/* Left panel — Agent Steps (60%) */}
+        <div className="w-[60%] overflow-y-auto p-5 flex flex-col gap-3 min-w-0 border-r" style={{ borderColor: "#1F1F1F" }}>
+          {STEPS.map(step => (
+            <StepCard
+              key={step.id}
+              step={step}
+              status={state.steps[step.id]}
+              code={state.stepCode[step.id] ?? ""}
+              files={state.stepFiles[step.id] ?? []}
+              currentFile={state.stepCurrentFile[step.id]}
+              fileContents={state.stepFileContents[step.id] ?? {}}
+              primaryColor={primary}
+            />
+          ))}
 
-            {/* Stopped */}
-            <AnimatePresence>
-              {state.phase === "stopped" && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="rounded-xl border px-5 py-4 flex items-center justify-between"
-                  style={{ borderColor: "#2A2A2A", background: "#111111" }}
-                >
-                  <div className="flex items-center gap-3">
-                    <Square size={15} style={{ color: "#525252" }} />
-                    <div>
-                      <p className="text-sm font-medium" style={{ color: "#A3A3A3" }}>Build stopped</p>
-                      <Link href={`/app/${startupId}`} className="text-xs" style={{ color: "#525252" }}>
-                        ← Back to report
-                      </Link>
-                    </div>
-                  </div>
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={handleResume}
-                    className="text-xs rounded-lg px-3 py-1.5 font-semibold cursor-pointer"
-                    style={{
-                      background: `${primary}18`,
-                      color: primary,
-                      border: `1px solid ${primary}30`,
-                    }}
-                  >
-                    Resume Build
-                  </motion.button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Error */}
-            <AnimatePresence>
-              {state.phase === "error" && state.error && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-xl border px-5 py-4"
-                  style={{ borderColor: "rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)" }}
-                >
-                  <div className="flex items-start gap-3">
-                    <AlertCircle size={16} className="shrink-0 mt-0.5" style={{ color: "#EF4444" }} />
-                    <div>
-                      <p className="text-sm font-semibold mb-1" style={{ color: "#EF4444" }}>Build failed</p>
-                      <p
-                        className="text-xs font-mono break-all leading-relaxed"
-                        style={{ color: "#A3A3A3" }}
-                      >
-                        {state.error}
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Delivery card */}
-            <AnimatePresence>
-              {state.phase === "complete" && (
-                <DeliveryCard
-                  startupId={startupId}
-                  fileCount={state.fileCount}
-                  filePaths={state.filePaths}
-                  onDeploy={() => void handleDeploy()}
-                  deployError={state.deployError}
-                  githubUrl={state.githubUrl}
-                  vercelDeployUrl={state.vercelDeployUrl}
-                  rileyGithubStatus={state.steps.riley_github}
-                  rileyDeployStatus={state.steps.riley_deploy}
-                  primaryColor={primary}
-                  credentials={state.credentials}
-                  onCredentialsSaved={handleCredentialsSaved}
-                />
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-
-        {/* Right panel — IDE or Brand Panel */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <AnimatePresence mode="wait">
-            {state.phase === "complete" && Object.keys(state.fileMap).length > 0 ? (
+          {/* Stopped */}
+          <AnimatePresence>
+            {state.phase === "stopped" && (
               <motion.div
-                key="ide"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.4 }}
-                className="flex flex-col h-full"
+                className="rounded-xl border px-5 py-4 flex items-center justify-between"
+                style={{ borderColor: "#2A2A2A", background: "#111111" }}
               >
-                <ProfessionalIDE
-                  files={state.fileMap}
-                  startupName={state.startupName}
-                  onDownloadZip={() => window.open(`/api/startups/${startupId}/download`, "_blank")}
-                  showStepsPanel={showStepsPanel}
-                  onToggleStepsPanel={() => setShowStepsPanel(!showStepsPanel)}
-                />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="brand"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.4 }}
-                className="flex flex-col h-full"
-              >
-                <RightPanel
-                  colors={state.colors}
-                  fonts={state.fonts}
-                  bgUrl={state.bgUrl}
-                  startupName={state.startupName}
-                  industry={state.industry}
-                  audience={state.audience}
-                  jordanDone={state.steps.jordan === "done"}
-                  isRunning={isRunning}
-                  primaryColor={primary}
-                  recentFiles={recentFiles}
-                />
+                <div className="flex items-center gap-3">
+                  <Square size={15} style={{ color: "#525252" }} />
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: "#A3A3A3" }}>Build stopped</p>
+                    <Link href={`/app/${startupId}`} className="text-xs" style={{ color: "#525252" }}>
+                      ← Back to report
+                    </Link>
+                  </div>
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={handleResume}
+                  className="text-xs rounded-lg px-3 py-1.5 font-semibold cursor-pointer"
+                  style={{
+                    background: `${primary}18`,
+                    color: primary,
+                    border: `1px solid ${primary}30`,
+                  }}
+                >
+                  Resume Build
+                </motion.button>
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Error */}
+          <AnimatePresence>
+            {state.phase === "error" && state.error && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-xl border px-5 py-4"
+                style={{ borderColor: "rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)" }}
+              >
+                <div className="flex items-start gap-3">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" style={{ color: "#EF4444" }} />
+                  <div>
+                    <p className="text-sm font-semibold mb-1" style={{ color: "#EF4444" }}>Build failed</p>
+                    <p
+                      className="text-xs font-mono break-all leading-relaxed"
+                      style={{ color: "#A3A3A3" }}
+                    >
+                      {state.error}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Delivery card at bottom when complete */}
+          <AnimatePresence>
+            {state.phase === "complete" && (
+              <DeliveryCard
+                startupId={startupId}
+                fileCount={state.fileCount}
+                filePaths={state.filePaths}
+                onDeploy={() => void handleDeploy()}
+                deployError={state.deployError}
+                githubUrl={state.githubUrl}
+                vercelDeployUrl={state.vercelDeployUrl}
+                rileyGithubStatus={state.steps.riley_github}
+                rileyDeployStatus={state.steps.riley_deploy}
+                primaryColor={primary}
+                credentials={state.credentials}
+                onCredentialsSaved={handleCredentialsSaved}
+              />
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Right panel — Brand Preview (40%) */}
+        <div className="w-[40%] flex flex-col overflow-hidden">
+          <RightPanel
+            colors={state.colors}
+            fonts={state.fonts}
+            bgUrl={state.bgUrl}
+            startupName={state.startupName}
+            industry={state.industry}
+            audience={state.audience}
+            jordanDone={state.steps.jordan === "done"}
+            isRunning={isRunning}
+            primaryColor={primary}
+            recentFiles={recentFiles}
+            fileCount={state.fileCount}
+            isComplete={state.phase === "complete"}
+          />
         </div>
       </div>
     </div>
@@ -1952,6 +1919,7 @@ function FileList({ paths }: { paths: string[] }) {
 function RightPanel({
   colors, fonts, bgUrl, startupName, industry, audience,
   jordanDone, isRunning, primaryColor, recentFiles = [],
+  fileCount = 0, isComplete = false,
 }: {
   colors: string[];
   fonts: string[];
@@ -1963,6 +1931,8 @@ function RightPanel({
   isRunning: boolean;
   primaryColor: string;
   recentFiles?: string[];
+  fileCount?: number;
+  isComplete?: boolean;
 }) {
   return (
     <div className="flex flex-col flex-1 overflow-hidden relative">
@@ -2140,11 +2110,43 @@ function RightPanel({
             ))}
           </div>
         </div>
+
+        {/* Code Generated Summary — shown when complete */}
+        <AnimatePresence>
+          {isComplete && fileCount > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl border p-4 mt-3"
+              style={{
+                background: `${primaryColor}08`,
+                borderColor: `${primaryColor}22`,
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle2 size={14} style={{ color: "#10B981" }} />
+                <p className="text-xs font-semibold" style={{ color: "#F5F5F5" }}>
+                  Code Generated
+                </p>
+              </div>
+              <p className="text-xs mb-2" style={{ color: "#A3A3A3" }}>
+                Your startup is ready with {fileCount} files including landing page, API routes, database schema, and payment integration.
+              </p>
+              <div className="flex items-center gap-1.5">
+                <FileCode2 size={10} style={{ color: primaryColor }} />
+                <span className="text-[10px] font-mono" style={{ color: "#525252" }}>
+                  {fileCount} files generated
+                </span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* File activity feed — sticky bottom, only during active generation */}
       <AnimatePresence>
-        {recentFiles.length > 0 && (
+        {recentFiles.length > 0 && !isComplete && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}

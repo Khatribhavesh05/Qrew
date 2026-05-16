@@ -300,16 +300,18 @@ export function ReportView({ startup }: ReportViewProps) {
 
         {/* ── Phase: Generating — agent status cards ── */}
         {(isGenerating || isDone) && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-4">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <AgentCard
               emoji="🔍" name="Alex" role="Research"
               state={agentStatus.alex} color="#6366F1"
-              onClick={agentStatus.alex === "done" ? () => openChat("alex") : undefined}
+              report={reports.research}
+              onClick={agentStatus.alex === "done" ? () => setPanel({ open: true, type: "research" }) : undefined}
             />
             <AgentCard
               emoji="📊" name="Sam" role="Strategy"
               state={agentStatus.sam} color="#10B981"
-              onClick={agentStatus.sam === "done" ? () => openChat("sam") : undefined}
+              report={reports.strategy}
+              onClick={agentStatus.sam === "done" ? () => setPanel({ open: true, type: "strategy" }) : undefined}
             />
           </motion.div>
         )}
@@ -444,11 +446,16 @@ function StepBadge({ n, label, done, active }: { n: number; label: string; done:
   );
 }
 
-function AgentCard({ emoji, name, role, state, color, subtitle, onClick }: {
-  emoji: string; name: string; role: string; state: "waiting" | "thinking" | "done"; color: string; subtitle?: string; onClick?: () => void;
+function AgentCard({ emoji, name, role, state, color, report, onClick }: {
+  emoji: string; name: string; role: string; state: "waiting" | "thinking" | "done"; color: string; report?: string; onClick?: () => void;
 }) {
   const isThinking = state === "thinking";
   const isDone = state === "done";
+  const isWaiting = state === "waiting";
+  
+  // Extract first 2 lines of report for preview
+  const reportPreview = report ? report.split('\n').filter(line => line.trim()).slice(0, 2).join(' ').substring(0, 120) + '...' : '';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -456,80 +463,169 @@ function AgentCard({ emoji, name, role, state, color, subtitle, onClick }: {
         opacity: 1,
         y: 0,
         scale: 1,
-        borderColor: isDone ? `${color}40` : "rgba(255,255,255,0.05)",
       }}
-      whileHover={isDone && onClick ? { y: -2, scale: 1.01 } : {}}
-      className="relative flex items-center gap-4 rounded-2xl border px-5 py-4 backdrop-blur-sm overflow-hidden"
+      whileHover={isDone && onClick ? { y: -4, scale: 1.02 } : {}}
+      className="relative flex flex-col rounded-2xl border backdrop-blur-sm overflow-hidden group"
       style={{
-        background: isDone ? `${color}08` : "rgba(17,17,17,0.6)",
+        background: isDone ? `linear-gradient(135deg, ${color}12, ${color}06)` : "rgba(17,17,17,0.8)",
+        borderColor: isDone ? `${color}50` : isThinking ? `${color}30` : "rgba(255,255,255,0.05)",
         cursor: isDone && onClick ? "pointer" : "default",
+        minHeight: "200px",
       }}
       onClick={isDone ? onClick : undefined}
     >
-      {/* Glow effect */}
+      {/* Animated border glow for working state */}
+      {isThinking && (
+        <>
+          <motion.div
+            className="absolute inset-0 rounded-2xl"
+            style={{ border: `2px solid ${color}`, opacity: 0.6 }}
+            animate={{
+              scale: [1, 1.02, 1],
+              opacity: [0.6, 0.3, 0.6]
+            }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{ background: `radial-gradient(circle at 50% 0%, ${color}15, transparent 70%)` }}
+          />
+        </>
+      )}
+
+      {/* Gradient glow for completed state */}
       {isDone && (
         <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: `radial-gradient(circle at 20% 50%, ${color}10, transparent 70%)` }}
+          className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          style={{ background: `radial-gradient(circle at 50% 0%, ${color}20, transparent 70%)` }}
         />
       )}
 
-      <div className="relative z-10">
-        <motion.div
-          animate={isThinking ? { scale: [1, 1.05, 1] } : {}}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="relative w-14 h-14 rounded-xl flex items-center justify-center text-2xl shrink-0"
-          style={{ background: isDone ? `${color}20` : "rgba(255,255,255,0.03)", border: `2px solid ${isDone ? `${color}50` : "rgba(255,255,255,0.05)"}` }}
-        >
-          {emoji}
-          {isThinking && (
-            <>
-              <motion.div
-                className="absolute inset-0 rounded-xl border-2"
-                style={{ borderColor: color }}
-                animate={{ scale: [1, 1.3], opacity: [0.8, 0] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-              />
-              <motion.div
-                className="absolute inset-0 rounded-xl border-2"
-                style={{ borderColor: color }}
-                animate={{ scale: [1, 1.3], opacity: [0.8, 0] }}
-                transition={{ duration: 1.5, repeat: Infinity, delay: 0.75 }}
-              />
-            </>
-          )}
-        </motion.div>
-      </div>
+      <div className="relative z-10 p-6 flex-1 flex flex-col">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <motion.div
+              animate={isThinking ? { scale: [1, 1.08, 1] } : isDone ? {} : {}}
+              transition={{ duration: 2, repeat: isThinking ? Infinity : 0 }}
+              className="relative w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shrink-0"
+              style={{
+                background: isDone ? `linear-gradient(135deg, ${color}40, ${color}20)` : isThinking ? `${color}15` : "rgba(255,255,255,0.03)",
+                border: `2px solid ${isDone ? `${color}60` : isThinking ? `${color}40` : "rgba(255,255,255,0.05)"}`,
+                boxShadow: isDone ? `0 8px 32px ${color}30` : "none"
+              }}
+            >
+              {emoji}
+              {isThinking && (
+                <>
+                  <motion.div
+                    className="absolute inset-0 rounded-2xl border-2"
+                    style={{ borderColor: color }}
+                    animate={{ scale: [1, 1.4], opacity: [0.8, 0] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                  />
+                  <motion.div
+                    className="absolute inset-0 rounded-2xl border-2"
+                    style={{ borderColor: color }}
+                    animate={{ scale: [1, 1.4], opacity: [0.8, 0] }}
+                    transition={{ duration: 1.5, repeat: Infinity, delay: 0.75 }}
+                  />
+                </>
+              )}
+            </motion.div>
+            <div>
+              <h3 className="text-lg font-bold mb-1" style={{ color: "#F5F5F5" }}>{name}</h3>
+              <span className="inline-flex items-center gap-1.5 text-xs rounded-full px-3 py-1 font-semibold" style={{ background: `${color}18`, color, border: `1px solid ${color}35` }}>
+                {role}
+              </span>
+            </div>
+          </div>
 
-      <div className="flex-1 min-w-0 relative z-10">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-base font-bold" style={{ color: "#F5F5F5" }}>{name}</span>
-          <span className="text-xs rounded-full px-2.5 py-1 font-semibold capitalize" style={{ background: `${color}15`, color, border: `1px solid ${color}30` }}>{role}</span>
+          {/* Status indicator */}
+          <div className="flex items-center gap-2">
+            {isThinking && (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              >
+                <Loader2 size={20} style={{ color }} />
+              </motion.div>
+            )}
+            {isDone && (
+              <motion.div
+                initial={{ scale: 0, rotate: -180 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20, delay: 0.2 }}
+              >
+                <CheckCircle size={24} style={{ color }} strokeWidth={2.5} />
+              </motion.div>
+            )}
+          </div>
         </div>
-        <p className="text-sm" style={{ color: "#9CA3AF" }}>
-          {subtitle ?? (isDone ? "Report ready" : isThinking ? "Working…" : "Waiting…")}
-        </p>
-      </div>
 
-      <div className="shrink-0 flex items-center gap-3 relative z-10">
+        {/* Status text */}
+        <div className="mb-4">
+          <p className="text-sm font-medium" style={{ color: isDone ? color : isThinking ? "#9CA3AF" : "#6B7280" }}>
+            {isDone ? "✓ Report Ready" : isThinking ? "Working..." : "Waiting..."}
+          </p>
+        </div>
+
+        {/* Report preview (only when done) */}
+        {isDone && reportPreview && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            transition={{ delay: 0.3 }}
+            className="flex-1 mb-4"
+          >
+            <p className="text-xs leading-relaxed line-clamp-2" style={{ color: "#9CA3AF" }}>
+              {reportPreview}
+            </p>
+          </motion.div>
+        )}
+
+        {/* Action button */}
         {isDone && onClick && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.3 }}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold"
-            style={{ background: `${color}15`, color, border: `1px solid ${color}30` }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="mt-auto"
           >
-            <MessageSquare size={12} />
-            Chat
+            <div className="flex items-center justify-between rounded-xl px-4 py-3 group-hover:bg-opacity-100 transition-all" style={{ background: `${color}12`, border: `1px solid ${color}25` }}>
+              <span className="text-sm font-bold" style={{ color }}>View Report</span>
+              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" style={{ color }} />
+            </div>
           </motion.div>
         )}
-        {isDone && (
-          <motion.div initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 400 }}>
-            <CheckCircle size={20} style={{ color }} strokeWidth={2.5} />
+
+        {/* Thinking state animation */}
+        {isThinking && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mt-auto flex items-center gap-2"
+          >
+            <motion.div
+              animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+              className="w-2 h-2 rounded-full"
+              style={{ background: color }}
+            />
+            <motion.div
+              animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }}
+              className="w-2 h-2 rounded-full"
+              style={{ background: color }}
+            />
+            <motion.div
+              animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity, delay: 0.4 }}
+              className="w-2 h-2 rounded-full"
+              style={{ background: color }}
+            />
           </motion.div>
         )}
-        {isThinking && <Loader2 size={18} className="animate-spin" style={{ color }} />}
       </div>
     </motion.div>
   );
@@ -580,6 +676,7 @@ function BuildCard({
   const insufficientCredits =
     !comingSoon && creditsBalance !== null && creditsBalance < cost;
   const isDisabled = !reportsReady || !!comingSoon || insufficientCredits;
+  const isStandard = type === "standard";
 
   const handleClick = () => {
     if (isDisabled) return;
@@ -588,39 +685,99 @@ function BuildCard({
 
   return (
     <motion.div
-      whileHover={!isDisabled ? { y: -2, scale: 1.01 } : {}}
-      className="flex flex-col rounded-2xl border p-5 transition-all backdrop-blur-sm"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: isStandard ? 0 : 0.1 }}
+      whileHover={!isDisabled ? { y: -6, scale: 1.02 } : {}}
+      className="relative flex flex-col rounded-3xl border p-6 transition-all backdrop-blur-xl overflow-hidden group"
       style={{
-        borderColor: comingSoon ? "rgba(255,255,255,0.05)" : `${color}30`,
-        background: comingSoon ? "rgba(17,17,17,0.4)" : `${color}06`,
+        borderColor: comingSoon ? "rgba(255,255,255,0.05)" : isStandard ? `${color}50` : `${color}30`,
+        background: comingSoon
+          ? "rgba(17,17,17,0.4)"
+          : isStandard
+            ? `linear-gradient(135deg, ${color}15, ${color}08)`
+            : `${color}08`,
         opacity: comingSoon ? 0.6 : 1,
+        boxShadow: !comingSoon && isStandard ? `0 8px 32px ${color}20` : "none",
       }}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-base font-bold" style={{ color: comingSoon ? "#6B7280" : "#F5F5F5" }}>{label}</span>
-          {comingSoon && (
-            <span className="text-xs rounded-full px-2 py-0.5 font-bold" style={{ background: "rgba(255,255,255,0.05)", color: "#6B7280" }}>
-              Soon
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            className="text-xs rounded-full px-2.5 py-1 font-bold"
-            style={{ background: comingSoon ? "rgba(255,255,255,0.03)" : `${color}18`, color: comingSoon ? "#6B7280" : color }}
-          >
-            {credits}
-          </span>
+      {/* Gradient glow effect */}
+      {!comingSoon && isStandard && (
+        <div
+          className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          style={{ background: `radial-gradient(circle at 50% 0%, ${color}25, transparent 70%)` }}
+        />
+      )}
+
+      {/* Recommended badge for Standard */}
+      {isStandard && !comingSoon && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-xs font-bold"
+          style={{
+            background: `linear-gradient(135deg, ${color}, ${color}CC)`,
+            color: "#fff",
+            boxShadow: `0 4px 16px ${color}40`
+          }}
+        >
+          ⭐ Recommended
+        </motion.div>
+      )}
+
+      <div className="relative z-10">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4 mt-2">
+          <div className="flex items-center gap-3">
+            <motion.div
+              whileHover={{ rotate: 360 }}
+              transition={{ duration: 0.6 }}
+              className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl"
+              style={{
+                background: comingSoon ? "rgba(255,255,255,0.05)" : `linear-gradient(135deg, ${color}30, ${color}15)`,
+                border: `2px solid ${comingSoon ? "rgba(255,255,255,0.08)" : `${color}40`}`,
+                boxShadow: comingSoon ? "none" : `0 4px 16px ${color}20`
+              }}
+            >
+              {isStandard ? "⚡" : "✨"}
+            </motion.div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg font-bold" style={{ color: comingSoon ? "#6B7280" : "#F5F5F5" }}>
+                  {label}
+                </span>
+                {comingSoon && (
+                  <span className="text-xs rounded-full px-2.5 py-0.5 font-bold" style={{ background: "rgba(255,255,255,0.05)", color: "#6B7280" }}>
+                    Soon
+                  </span>
+                )}
+              </div>
+              <span
+                className="inline-flex text-xs rounded-full px-3 py-1 font-bold"
+                style={{ background: comingSoon ? "rgba(255,255,255,0.03)" : `${color}20`, color: comingSoon ? "#6B7280" : color }}
+              >
+                {credits}
+              </span>
+            </div>
+          </div>
           <div className="relative">
             <button
               onMouseEnter={() => setShowTooltip(true)}
               onMouseLeave={() => setShowTooltip(false)}
-              className="flex items-center justify-center rounded-full transition-colors"
-              style={{ color: "#6B7280" }}
+              className="flex items-center justify-center w-8 h-8 rounded-full transition-all"
+              style={{
+                color: "#6B7280",
+                background: "rgba(255,255,255,0.05)"
+              }}
+              onMouseOver={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.1)";
+              }}
+              onMouseOut={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)";
+              }}
             >
-              <Info size={14} />
+              <Info size={16} />
             </button>
             <AnimatePresence>
               {showTooltip && (
@@ -629,50 +786,102 @@ function BuildCard({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 4, scale: 0.95 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 bottom-full mb-2 z-50 rounded-xl border p-3 w-56 text-left backdrop-blur-md"
-                  style={{ background: "rgba(22,22,22,0.95)", borderColor: `${color}30`, boxShadow: `0 8px 32px rgba(0,0,0,0.6)` }}
+                  className="absolute right-0 bottom-full mb-3 z-50 rounded-2xl border p-4 w-64 text-left backdrop-blur-xl"
+                  style={{
+                    background: "rgba(17,17,17,0.98)",
+                    borderColor: `${color}40`,
+                    boxShadow: `0 12px 48px rgba(0,0,0,0.8), 0 0 0 1px ${color}20`
+                  }}
                 >
                   {tooltip.split("\n").map((line, i) => (
-                    <p key={i} className="text-xs leading-relaxed mb-1" style={{ color: line.startsWith("Everything") ? "#9CA3AF" : "#F5F5F5" }}>
+                    <p key={i} className="text-xs leading-relaxed mb-1.5 last:mb-0" style={{ color: line.startsWith("Everything") ? "#9CA3AF" : "#F5F5F5" }}>
                       {line}
                     </p>
                   ))}
                   <div
-                    className="absolute right-2 top-full w-2 h-2 rotate-45"
-                    style={{ background: "rgba(22,22,22,0.95)", borderRight: `1px solid ${color}30`, borderBottom: `1px solid ${color}30`, marginTop: "-5px" }}
+                    className="absolute right-4 top-full w-3 h-3 rotate-45"
+                    style={{
+                      background: "rgba(17,17,17,0.98)",
+                      borderRight: `1px solid ${color}40`,
+                      borderBottom: `1px solid ${color}40`,
+                      marginTop: "-7px"
+                    }}
                   />
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
         </div>
+
+        <p className="text-sm leading-relaxed mb-6 flex-1" style={{ color: "#9CA3AF" }}>{desc}</p>
+
+        {/* Features list */}
+        {!comingSoon && (
+          <div className="mb-6 space-y-2">
+            {(isStandard
+              ? ["Full Next.js website", "AI generated design", "Database + Auth + Payments", "Live on Vercel"]
+              : ["Everything in Standard", "Cinematic scroll video", "Apple.com experience", "Full brand package"]
+            ).map((feature, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 + i * 0.05 }}
+                className="flex items-center gap-2 text-xs"
+                style={{ color: "#D1D5DB" }}
+              >
+                <div className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+                {feature}
+              </motion.div>
+            ))}
+          </div>
+        )}
+
+        {insufficientCredits ? (
+          <a
+            href="/app?buy=true"
+            className="w-full flex items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold transition-all"
+            style={{ background: "rgba(239,68,68,0.12)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.3)" }}
+          >
+            Insufficient credits — Buy more
+          </a>
+        ) : (
+          <motion.button
+            whileHover={!isDisabled ? { scale: 1.03 } : {}}
+            whileTap={!isDisabled ? { scale: 0.97 } : {}}
+            onClick={comingSoon ? undefined : handleClick}
+            disabled={isDisabled}
+            className="w-full flex items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold transition-all relative overflow-hidden"
+            style={comingSoon
+              ? { background: "rgba(255,255,255,0.03)", color: "#6B7280", border: "1px solid rgba(255,255,255,0.05)", cursor: "not-allowed" }
+              : {
+                  background: isStandard ? `linear-gradient(135deg, ${color}, ${color}DD)` : color,
+                  color: "#fff",
+                  boxShadow: isDisabled ? "none" : `0 8px 32px ${color}50, inset 0 1px 0 rgba(255,255,255,0.2)`,
+                  opacity: isDisabled ? 0.5 : 1,
+                  border: `1px solid ${color}`
+                }
+            }
+          >
+            {!comingSoon && !isDisabled && (
+              <motion.div
+                className="absolute inset-0"
+                animate={{
+                  background: [
+                    `linear-gradient(90deg, transparent, ${color}40, transparent)`,
+                    `linear-gradient(90deg, transparent, ${color}40, transparent)`
+                  ],
+                  x: ["-100%", "200%"]
+                }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              />
+            )}
+            <span className="relative z-10 flex items-center gap-2">
+              {comingSoon ? "Coming Soon" : <><Rocket size={16} /> Start {label} Build</>}
+            </span>
+          </motion.button>
+        )}
       </div>
-
-      <p className="text-sm leading-relaxed mb-5 flex-1" style={{ color: "#9CA3AF" }}>{desc}</p>
-
-      {insufficientCredits ? (
-        <a
-          href="/app?buy=true"
-          className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-all"
-          style={{ background: "rgba(239,68,68,0.1)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.3)" }}
-        >
-          Insufficient credits — Buy more
-        </a>
-      ) : (
-        <motion.button
-          whileHover={!isDisabled ? { scale: 1.02 } : {}}
-          whileTap={!isDisabled ? { scale: 0.98 } : {}}
-          onClick={comingSoon ? undefined : handleClick}
-          disabled={isDisabled}
-          className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-all"
-          style={comingSoon
-            ? { background: "rgba(255,255,255,0.03)", color: "#6B7280", border: "1px solid rgba(255,255,255,0.05)", cursor: "not-allowed" }
-            : { background: color, color: "#fff", boxShadow: isDisabled ? "none" : `0 0 20px ${color}40`, opacity: isDisabled ? 0.5 : 1 }
-          }
-        >
-          {comingSoon ? "Coming Soon" : <><Rocket size={14} /> Start {label} Build</>}
-        </motion.button>
-      )}
     </motion.div>
   );
 }
