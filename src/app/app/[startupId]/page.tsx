@@ -6,7 +6,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2, AlertCircle, Globe, GitBranch,
-  ExternalLink, LayoutDashboard, Rocket, FileCode2,
+  ExternalLink, LayoutDashboard, Rocket, FileCode2, Sparkles,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { ReportView } from "@/components/qrew/report-view";
@@ -73,7 +73,6 @@ export default function StartupPage() {
   }, [startupId, router]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchData().then((s) => {
       if (!s) return;
 
@@ -156,24 +155,36 @@ export default function StartupPage() {
 function DraftScreen({ startupId }: { startupId: string }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-6 px-4" style={{ background: "#0A0A0A", color: "#F5F5F5" }}>
-      <div className="pointer-events-none fixed inset-0" style={{ background: "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(99,102,241,0.08), transparent 60%)" }} />
-      <div className="relative z-10 text-center max-w-sm">
+      <div className="pointer-events-none fixed inset-0">
         <motion.div
-          animate={{ scale: [1, 1.08, 1], opacity: [0.5, 1, 0.5] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 text-3xl"
-          style={{ background: "#111111", border: "1px solid #1F1F1F" }}
+          animate={{
+            background: [
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(99,102,241,0.1), transparent 60%)",
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(139,92,246,0.08), transparent 60%)",
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(99,102,241,0.1), transparent 60%)",
+            ],
+          }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute inset-0"
+        />
+      </div>
+      <div className="relative z-10 text-center max-w-md">
+        <motion.div
+          animate={{ rotate: [0, 360] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+          className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6"
+          style={{ background: "linear-gradient(135deg, #6366F1, #8B5CF6)", boxShadow: "0 0 40px rgba(99,102,241,0.4)" }}
         >
-          ⚙️
+          <Sparkles size={32} color="#fff" />
         </motion.div>
-        <h2 className="text-lg font-bold mb-2" style={{ letterSpacing: "-0.02em" }}>Setting up your startup…</h2>
-        <p className="text-sm mb-8" style={{ color: "#A3A3A3" }}>
+        <h2 className="text-2xl font-bold mb-3" style={{ letterSpacing: "-0.02em" }}>Setting up your startup…</h2>
+        <p className="text-base mb-8" style={{ color: "#9CA3AF" }}>
           Your team is being assembled. This takes about 30 seconds.
         </p>
         <a
           href={`/app/${startupId}/process`}
-          className="text-xs"
-          style={{ color: "#6366F1" }}
+          className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl px-6 py-3"
+          style={{ color: "#6366F1", background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)" }}
         >
           Continue setup →
         </a>
@@ -204,71 +215,83 @@ function BuildingScreen({
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ background: "#0A0A0A", color: "#F5F5F5" }}>
-      <div className="pointer-events-none fixed inset-0" style={{ background: "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(243,146,11,0.08), transparent 60%)" }} />
+      <div className="pointer-events-none fixed inset-0">
+        <motion.div
+          animate={{
+            background: [
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(243,146,11,0.1), transparent 60%)",
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(251,191,36,0.08), transparent 60%)",
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(243,146,11,0.1), transparent 60%)",
+            ],
+          }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute inset-0"
+        />
+      </div>
       <div className="relative z-10 w-full max-w-md">
-        <div className="text-center mb-2">
-          <span className="text-lg font-bold" style={{ color: "#6366F1", letterSpacing: "-0.04em" }}>qrew</span>
+        <div className="text-center mb-6">
+          <span className="text-xl font-bold" style={{ color: "#6366F1", letterSpacing: "-0.04em" }}>qrew</span>
         </div>
 
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border p-6 mt-6"
-          style={{ background: "#111111", borderColor: "#1F1F1F" }}
+          className="rounded-2xl border p-6 backdrop-blur-sm"
+          style={{ background: "rgba(17,17,17,0.8)", borderColor: "rgba(255,255,255,0.05)" }}
         >
           {isRunning ? (
             <>
               <div className="flex items-center gap-3 mb-4">
-                <Loader2 size={18} className="animate-spin" style={{ color: "#F59E0B" }} />
+                <Loader2 size={20} className="animate-spin" style={{ color: "#F59E0B" }} />
                 <div>
-                  <p className="text-sm font-semibold">Build in progress</p>
+                  <p className="text-base font-bold">Build in progress</p>
                   {stepInfo && (
-                    <p className="text-xs mt-0.5" style={{ color: "#A3A3A3" }}>
+                    <p className="text-sm mt-1" style={{ color: "#9CA3AF" }}>
                       Step {stepInfo.n} of 4 — {stepInfo.label}
                     </p>
                   )}
                 </div>
               </div>
-              <p className="text-xs mb-5" style={{ color: "#525252" }}>
+              <p className="text-sm mb-6" style={{ color: "#6B7280" }}>
                 Morgan is generating your codebase. Navigate to the build screen to watch live.
               </p>
               <a
                 href={`/app/${startupId}/build?type=standard`}
-                className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-sm font-semibold text-white"
-                style={{ background: "#F59E0B", boxShadow: "0 0 20px rgba(243,146,11,0.3)" }}
+                className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-sm font-bold text-white"
+                style={{ background: "#F59E0B", boxShadow: "0 0 24px rgba(243,146,11,0.4)" }}
               >
-                <FileCode2 size={14} />
+                <FileCode2 size={16} />
                 Watch Build Live
               </a>
             </>
           ) : isInterrupted ? (
             <>
               <div className="flex items-center gap-3 mb-4">
-                <AlertCircle size={18} style={{ color: "#EF4444" }} />
+                <AlertCircle size={20} style={{ color: "#EF4444" }} />
                 <div>
-                  <p className="text-sm font-semibold">Build was interrupted</p>
+                  <p className="text-base font-bold">Build was interrupted</p>
                   {stepInfo && (
-                    <p className="text-xs mt-0.5" style={{ color: "#A3A3A3" }}>
+                    <p className="text-sm mt-1" style={{ color: "#9CA3AF" }}>
                       Stopped at step {stepInfo.n} — {stepInfo.label}
                     </p>
                   )}
                 </div>
               </div>
-              <p className="text-xs mb-5" style={{ color: "#525252" }}>
+              <p className="text-sm mb-6" style={{ color: "#6B7280" }}>
                 The build stopped before completing. Resume to start a new build.
               </p>
               <a
                 href={`/app/${startupId}/build?type=standard`}
-                className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-sm font-semibold text-white mb-2"
-                style={{ background: "#6366F1", boxShadow: "0 0 20px rgba(99,102,241,0.3)" }}
+                className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-sm font-bold text-white mb-3"
+                style={{ background: "#6366F1", boxShadow: "0 0 24px rgba(99,102,241,0.4)" }}
               >
-                <Rocket size={14} />
+                <Rocket size={16} />
                 Resume Build
               </a>
               <button
                 onClick={onRefresh}
-                className="w-full rounded-xl py-2.5 text-xs"
-                style={{ color: "#525252" }}
+                className="w-full rounded-xl py-2.5 text-sm font-medium"
+                style={{ color: "#6B7280", background: "rgba(255,255,255,0.03)" }}
               >
                 Refresh status
               </button>
@@ -276,23 +299,23 @@ function BuildingScreen({
           ) : (
             <>
               <div className="flex items-center gap-3 mb-4">
-                <Loader2 size={18} className="animate-spin" style={{ color: "#6366F1" }} />
-                <p className="text-sm font-semibold">Preparing build...</p>
+                <Loader2 size={20} className="animate-spin" style={{ color: "#6366F1" }} />
+                <p className="text-base font-bold">Preparing build...</p>
               </div>
               <a
                 href={`/app/${startupId}/build?type=standard`}
-                className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-sm font-semibold text-white"
-                style={{ background: "#6366F1" }}
+                className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-sm font-bold text-white"
+                style={{ background: "#6366F1", boxShadow: "0 0 24px rgba(99,102,241,0.4)" }}
               >
-                <Rocket size={14} />
+                <Rocket size={16} />
                 Start Build
               </a>
             </>
           )}
         </motion.div>
 
-        <div className="text-center mt-4">
-          <Link href="/app" className="text-xs" style={{ color: "#525252" }}>← Dashboard</Link>
+        <div className="text-center mt-6">
+          <Link href="/app" className="text-sm font-medium" style={{ color: "#6B7280" }}>← Dashboard</Link>
         </div>
       </div>
     </div>
@@ -345,29 +368,41 @@ function BuiltScreen({
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ background: "#0A0A0A", color: "#F5F5F5" }}>
-      <div className="pointer-events-none fixed inset-0" style={{ background: "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(139,92,246,0.1), transparent 60%)" }} />
+      <div className="pointer-events-none fixed inset-0">
+        <motion.div
+          animate={{
+            background: [
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(139,92,246,0.12), transparent 60%)",
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(168,85,247,0.10), transparent 60%)",
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(139,92,246,0.12), transparent 60%)",
+            ],
+          }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute inset-0"
+        />
+      </div>
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-6">
-          <span className="text-lg font-bold" style={{ color: "#6366F1", letterSpacing: "-0.04em" }}>qrew</span>
+          <span className="text-xl font-bold" style={{ color: "#6366F1", letterSpacing: "-0.04em" }}>qrew</span>
         </div>
 
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border p-6"
-          style={{ background: "#111111", borderColor: "#1F1F1F" }}
+          className="rounded-2xl border p-6 backdrop-blur-sm"
+          style={{ background: "rgba(17,17,17,0.8)", borderColor: "rgba(139,92,246,0.3)" }}
         >
           {/* Header */}
-          <div className="flex items-center gap-3 mb-5">
+          <div className="flex items-center gap-3 mb-6">
             <div
-              className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0"
-              style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)" }}
+              className="w-14 h-14 rounded-xl flex items-center justify-center text-2xl shrink-0"
+              style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)" }}
             >
               ✅
             </div>
             <div>
-              <p className="text-sm font-bold" style={{ color: "#F5F5F5" }}>Code Generated</p>
-              <p className="text-xs mt-0.5" style={{ color: "#A3A3A3" }}>
+              <p className="text-base font-bold" style={{ color: "#F5F5F5" }}>Code Generated</p>
+              <p className="text-sm mt-1" style={{ color: "#9CA3AF" }}>
                 {fileCount !== null ? `${fileCount} files ready` : "Loading files..."} · {startup.name}
               </p>
             </div>
@@ -378,7 +413,7 @@ function BuiltScreen({
               <motion.div
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="rounded-lg border px-3 py-2 mb-4 text-xs"
+                className="rounded-xl border px-3 py-2 mb-4 text-sm"
                 style={{ borderColor: "rgba(239,68,68,0.3)", color: "#EF4444", background: "rgba(239,68,68,0.06)" }}
               >
                 {deployError}
@@ -389,28 +424,28 @@ function BuiltScreen({
           {/* Deploy button */}
           <motion.button
             whileHover={!deploying ? { scale: 1.02 } : {}}
-            whileTap={!deploying ? { scale: 0.97 } : {}}
+            whileTap={!deploying ? { scale: 0.98 } : {}}
             onClick={() => void handleDeploy()}
             disabled={deploying}
-            className="w-full flex items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-semibold mb-3 disabled:opacity-60"
-            style={{ background: "#8B5CF6", color: "#fff", boxShadow: deploying ? "none" : "0 0 24px rgba(139,92,246,0.4)" }}
+            className="w-full flex items-center justify-center gap-2 rounded-xl py-4 text-sm font-bold mb-3 disabled:opacity-60"
+            style={{ background: "#8B5CF6", color: "#fff", boxShadow: deploying ? "none" : "0 0 30px rgba(139,92,246,0.5)" }}
           >
-            {deploying ? <><Loader2 size={14} className="animate-spin" /> Deploying…</> : <><Rocket size={14} /> Push to GitHub &amp; Deploy</>}
+            {deploying ? <><Loader2 size={16} className="animate-spin" /> Deploying…</> : <><Rocket size={16} /> Push to GitHub & Deploy</>}
           </motion.button>
 
           {/* View build details */}
           <a
             href={`/app/${startup.id}/build?type=standard`}
-            className="flex items-center justify-center gap-1.5 w-full rounded-xl py-2.5 text-xs"
-            style={{ color: "#525252", border: "1px solid #1A1A1A" }}
+            className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-sm font-medium"
+            style={{ color: "#9CA3AF", border: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.02)" }}
           >
-            <FileCode2 size={11} />
+            <FileCode2 size={14} />
             View generated code
           </a>
         </motion.div>
 
-        <div className="text-center mt-4">
-          <Link href="/app" className="text-xs" style={{ color: "#525252" }}>← Dashboard</Link>
+        <div className="text-center mt-6">
+          <Link href="/app" className="text-sm font-medium" style={{ color: "#6B7280" }}>← Dashboard</Link>
         </div>
       </div>
     </div>
@@ -424,7 +459,19 @@ function DeployedScreen({ startup }: { startup: Startup }) {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 relative overflow-hidden" style={{ background: "#0A0A0A", color: "#F5F5F5" }}>
-      <div className="pointer-events-none fixed inset-0" style={{ background: `radial-gradient(ellipse 70% 50% at 50% 30%, ${primaryColor}10, transparent 60%)` }} />
+      <div className="pointer-events-none fixed inset-0">
+        <motion.div
+          animate={{
+            background: [
+              `radial-gradient(ellipse 70% 50% at 50% 30%, ${primaryColor}12, transparent 60%)`,
+              `radial-gradient(ellipse 70% 50% at 50% 30%, ${primaryColor}10, transparent 60%)`,
+              `radial-gradient(ellipse 70% 50% at 50% 30%, ${primaryColor}12, transparent 60%)`,
+            ],
+          }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute inset-0"
+        />
+      </div>
 
       <div className="relative z-10 w-full max-w-md">
         <motion.div
@@ -432,7 +479,7 @@ function DeployedScreen({ startup }: { startup: Startup }) {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-8"
         >
-          <span className="text-lg font-bold" style={{ color: "#6366F1", letterSpacing: "-0.04em" }}>qrew</span>
+          <span className="text-xl font-bold" style={{ color: "#6366F1", letterSpacing: "-0.04em" }}>qrew</span>
         </motion.div>
 
         {/* Success badge */}
@@ -440,17 +487,17 @@ function DeployedScreen({ startup }: { startup: Startup }) {
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
-          className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5 text-3xl"
-          style={{ background: `${primaryColor}15`, border: `1px solid ${primaryColor}30`, boxShadow: `0 0 40px ${primaryColor}25` }}
+          className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 text-4xl"
+          style={{ background: `${primaryColor}15`, border: `2px solid ${primaryColor}40`, boxShadow: `0 0 50px ${primaryColor}30` }}
         >
           🚀
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="text-center mb-8">
-          <h1 className="text-2xl font-bold mb-1" style={{ letterSpacing: "-0.03em" }}>
+          <h1 className="text-3xl font-bold mb-2" style={{ letterSpacing: "-0.03em" }}>
             {startup.name ?? "Your startup"} is live
           </h1>
-          <p className="text-sm" style={{ color: "#A3A3A3" }}>
+          <p className="text-base" style={{ color: "#9CA3AF" }}>
             {startup.industry ?? "Your company"} · Deployed on Vercel
           </p>
         </motion.div>
@@ -467,12 +514,12 @@ function DeployedScreen({ startup }: { startup: Startup }) {
               href={startup.live_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 rounded-xl border px-5 py-3.5 text-sm font-semibold group"
-              style={{ background: primaryColor, borderColor: primaryColor, color: "#fff", boxShadow: `0 0 24px ${primaryColor}40` }}
+              className="flex items-center gap-3 rounded-xl border px-5 py-4 text-sm font-bold group"
+              style={{ background: primaryColor, borderColor: primaryColor, color: "#fff", boxShadow: `0 0 30px ${primaryColor}50` }}
             >
-              <Globe size={15} />
+              <Globe size={18} />
               <span className="flex-1 text-left truncate">{startup.live_url.replace("https://", "")}</span>
-              <ExternalLink size={12} className="opacity-60 group-hover:opacity-100" />
+              <ExternalLink size={14} className="opacity-80 group-hover:opacity-100" />
             </a>
           )}
 
@@ -481,27 +528,27 @@ function DeployedScreen({ startup }: { startup: Startup }) {
               href={startup.github_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 rounded-xl border px-5 py-3.5 text-sm font-medium transition-all"
-              style={{ background: "#111111", borderColor: "#1F1F1F", color: "#F5F5F5" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#333"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#1F1F1F"; }}
+              className="flex items-center gap-3 rounded-xl border px-5 py-4 text-sm font-medium transition-all backdrop-blur-sm"
+              style={{ background: "rgba(17,17,17,0.6)", borderColor: "rgba(255,255,255,0.05)", color: "#F5F5F5" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.1)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.05)"; }}
             >
-              <GitBranch size={15} style={{ color: "#A3A3A3" }} />
-              <span className="flex-1 text-left text-sm truncate" style={{ color: "#A3A3A3" }}>
+              <GitBranch size={18} style={{ color: "#9CA3AF" }} />
+              <span className="flex-1 text-left text-sm truncate" style={{ color: "#9CA3AF" }}>
                 {startup.github_url.replace("https://github.com/", "")}
               </span>
-              <ExternalLink size={12} style={{ color: "#525252" }} />
+              <ExternalLink size={14} style={{ color: "#6B7280" }} />
             </a>
           )}
 
           <Link
             href="/app"
-            className="flex items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm transition-all"
-            style={{ borderColor: "#1F1F1F", color: "#525252" }}
-            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#333"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#1F1F1F"; }}
+            className="flex items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-medium transition-all"
+            style={{ borderColor: "rgba(255,255,255,0.05)", color: "#9CA3AF", background: "rgba(255,255,255,0.02)" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.1)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.05)"; }}
           >
-            <LayoutDashboard size={14} />
+            <LayoutDashboard size={16} />
             Back to Dashboard
           </Link>
         </motion.div>
@@ -515,26 +562,28 @@ function DeployedScreen({ startup }: { startup: Startup }) {
 function ErrorScreen({ startupId, onRetry }: { startupId: string; onRetry: () => void }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-6 px-4" style={{ background: "#0A0A0A", color: "#F5F5F5" }}>
-      <AlertCircle size={32} style={{ color: "#EF4444" }} />
-      <div className="text-center">
-        <h2 className="text-lg font-bold mb-1">Something went wrong</h2>
-        <p className="text-sm mb-6" style={{ color: "#A3A3A3" }}>
+      <AlertCircle size={40} style={{ color: "#EF4444" }} />
+      <div className="text-center max-w-md">
+        <h2 className="text-2xl font-bold mb-2">Something went wrong</h2>
+        <p className="text-base mb-8" style={{ color: "#9CA3AF" }}>
           This startup hit an error during processing.
         </p>
-        <div className="flex items-center gap-3 justify-center">
+        <div className="flex flex-col sm:flex-row items-center gap-3 justify-center">
           <button
             onClick={onRetry}
-            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
-            style={{ background: "#6366F1" }}
+            className="w-full sm:w-auto rounded-xl px-6 py-3 text-sm font-bold text-white"
+            style={{ background: "#6366F1", boxShadow: "0 0 24px rgba(99,102,241,0.4)" }}
           >
             Retry
           </button>
-          <Link href="/app" className="rounded-xl border px-4 py-2.5 text-sm" style={{ borderColor: "#1F1F1F", color: "#A3A3A3" }}>
+          <Link href="/app" className="w-full sm:w-auto rounded-xl border px-6 py-3 text-sm font-medium text-center" style={{ borderColor: "rgba(255,255,255,0.05)", color: "#9CA3AF" }}>
             Dashboard
           </Link>
         </div>
       </div>
-      <p className="text-xs" style={{ color: "#333" }}>ID: {startupId}</p>
+      <p className="text-xs" style={{ color: "#4B5563" }}>ID: {startupId}</p>
     </div>
   );
 }
+
+// Made with Bob

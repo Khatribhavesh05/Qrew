@@ -3,26 +3,75 @@ import { createClient } from "@/lib/supabase-server";
 
 export const maxDuration = 60;
 
-const VIBE_PALETTES: Record<string, { colors: string[]; fonts: string[] }> = {
-  bold:       { colors: ["#0A0A0A", "#FFFFFF", "#FF3333", "#FF6B6B"], fonts: ["Space Grotesk", "Inter"] },
-  calm:       { colors: ["#F8F4EF", "#2D2D2D", "#B4A99A", "#6B7280"], fonts: ["DM Sans", "Lora"] },
-  playful:    { colors: ["#FFD93D", "#6BCB77", "#4D96FF", "#FF6B6B"], fonts: ["Nunito", "Poppins"] },
-  luxury:     { colors: ["#0A0A0A", "#D4AF37", "#C0A060", "#FAF8F0"], fonts: ["Playfair Display", "Cormorant Garamond"] },
-  tech:       { colors: ["#000814", "#00B4D8", "#90E0EF", "#0077B6"], fonts: ["Space Mono", "Rajdhani"] },
-  futuristic: { colors: ["#050510", "#6366F1", "#818CF8", "#C7D2FE"], fonts: ["Space Grotesk", "Inter"] },
-  warm:       { colors: ["#FFF8F0", "#FF6B35", "#F7C59F", "#2D3047"], fonts: ["Nunito", "Quicksand"] },
-  minimal:    { colors: ["#FAFAFA", "#111111", "#E5E5E5", "#666666"], fonts: ["Plus Jakarta Sans", "Inter"] },
-  dark:       { colors: ["#0D0D0D", "#6366F1", "#818CF8", "#C7D2FE"], fonts: ["Space Grotesk", "Inter"] },
-  modern:     { colors: ["#09090B", "#FAFAFA", "#71717A", "#3F3F46"], fonts: ["Plus Jakarta Sans", "Inter"] },
-  clean:      { colors: ["#FFFFFF", "#111111", "#6366F1", "#E0E7FF"], fonts: ["Inter", "Plus Jakarta Sans"] },
+// ── Industry-specific brand palettes ──────────────────────────────────────────
+const INDUSTRY_PALETTES: Record<string, { colors: string[]; fonts: string[] }> = {
+  fintech:     { colors: ["#0A1628", "#D4AF37", "#1E3A5F", "#F5F5F5", "#FFFFFF"], fonts: ["Inter", "JetBrains Mono"] },
+  finance:     { colors: ["#0A1628", "#D4AF37", "#1E3A5F", "#F5F5F5", "#FFFFFF"], fonts: ["Inter", "JetBrains Mono"] },
+  health:      { colors: ["#F0F9F4", "#10B981", "#FFFFFF", "#065F46", "#1F2937"], fonts: ["Plus Jakarta Sans", "Inter"] },
+  healthcare:  { colors: ["#F0F9F4", "#10B981", "#FFFFFF", "#065F46", "#1F2937"], fonts: ["Plus Jakarta Sans", "Inter"] },
+  fashion:     { colors: ["#0A0A0A", "#FFB6C1", "#FFFFFF", "#FF69B4", "#1F1F1F"], fonts: ["Playfair Display", "Lato"] },
+  ecommerce:   { colors: ["#0A0A0A", "#FFB6C1", "#FFFFFF", "#FF69B4", "#1F1F1F"], fonts: ["Playfair Display", "Lato"] },
+  saas:        { colors: ["#0A0A0A", "#0EA5E9", "#FFFFFF", "#38BDF8", "#1E293B"], fonts: ["Space Grotesk", "DM Sans"] },
+  software:    { colors: ["#0A0A0A", "#0EA5E9", "#FFFFFF", "#38BDF8", "#1E293B"], fonts: ["Space Grotesk", "DM Sans"] },
+  technology:  { colors: ["#0A0A0A", "#0EA5E9", "#FFFFFF", "#38BDF8", "#1E293B"], fonts: ["Space Grotesk", "DM Sans"] },
+  food:        { colors: ["#FFF8F0", "#FF6B35", "#FFFFFF", "#F97316", "#78350F"], fonts: ["Nunito", "Open Sans"] },
+  restaurant:  { colors: ["#FFF8F0", "#FF6B35", "#FFFFFF", "#F97316", "#78350F"], fonts: ["Nunito", "Open Sans"] },
+  education:   { colors: ["#F0F4FF", "#4F46E5", "#FFFFFF", "#6366F1", "#1E1B4B"], fonts: ["Inter", "Lora"] },
+  learning:    { colors: ["#F0F4FF", "#4F46E5", "#FFFFFF", "#6366F1", "#1E1B4B"], fonts: ["Inter", "Lora"] },
+  luxury:      { colors: ["#0A0A0A", "#D4AF37", "#FFFFFF", "#B8860B", "#1F1F1F"], fonts: ["Cormorant Garamond", "Montserrat"] },
+  travel:      { colors: ["#0A1F3D", "#00B4D8", "#FFFFFF", "#0077B6", "#F0F9FF"], fonts: ["Poppins", "Inter"] },
+  real_estate: { colors: ["#1C1C1C", "#10B981", "#FFFFFF", "#059669", "#F5F5F5"], fonts: ["Plus Jakarta Sans", "Inter"] },
+  gaming:      { colors: ["#0A0A0A", "#A855F7", "#FFFFFF", "#C084FC", "#1F1F1F"], fonts: ["Space Grotesk", "Inter"] },
+  crypto:      { colors: ["#0A0A0A", "#F59E0B", "#FFFFFF", "#FBBF24", "#1F1F1F"], fonts: ["Space Mono", "Inter"] },
+  ai:          { colors: ["#050510", "#6366F1", "#FFFFFF", "#818CF8", "#C7D2FE"], fonts: ["Space Grotesk", "Inter"] },
 };
 
-function getPalette(vibe: string): { colors: string[]; fonts: string[] } {
-  const v = vibe.toLowerCase();
-  for (const [key, palette] of Object.entries(VIBE_PALETTES)) {
-    if (v.includes(key)) return palette;
+// ── Brand vibe modifiers ──────────────────────────────────────────────────────
+const VIBE_MODIFIERS: Record<string, { colors: string[]; fonts: string[] }> = {
+  bold:        { colors: ["#0A0A0A", "#FF3333", "#FFFFFF", "#FF6B6B", "#1F1F1F"], fonts: ["Space Grotesk", "DM Sans"] },
+  playful:     { colors: ["#FFD93D", "#6BCB77", "#FFFFFF", "#4D96FF", "#FF6B6B"], fonts: ["Nunito", "Poppins"] },
+  minimal:     { colors: ["#FAFAFA", "#111111", "#FFFFFF", "#E5E5E5", "#666666"], fonts: ["Plus Jakarta Sans", "Inter"] },
+  dark:        { colors: ["#0A0A0A", "#6366F1", "#FFFFFF", "#818CF8", "#C7D2FE"], fonts: ["Space Grotesk", "Inter"] },
+  professional: { colors: ["#0A0A0A", "#3B82F6", "#FFFFFF", "#60A5FA", "#1E293B"], fonts: ["Inter", "JetBrains Mono"] },
+  creative:    { colors: ["#0A0A0A", "#EC4899", "#FFFFFF", "#F472B6", "#1F1F1F"], fonts: ["Playfair Display", "Lato"] },
+  friendly:    { colors: ["#FFF8F0", "#10B981", "#FFFFFF", "#34D399", "#065F46"], fonts: ["Nunito", "Open Sans"] },
+};
+
+function generateBrandPalette(industry: string, vibe: string): { colors: string[]; fonts: string[] } {
+  const industryKey = industry.toLowerCase().replace(/\s+/g, "_");
+  const vibeKey = vibe.toLowerCase().replace(/\s+/g, "_");
+  
+  // Priority 1: Exact industry match
+  if (INDUSTRY_PALETTES[industryKey]) {
+    console.log(`[Jordan] Using industry palette: ${industryKey}`);
+    return INDUSTRY_PALETTES[industryKey];
   }
-  return VIBE_PALETTES.dark;
+  
+  // Priority 2: Partial industry match
+  for (const [key, palette] of Object.entries(INDUSTRY_PALETTES)) {
+    if (industryKey.includes(key) || key.includes(industryKey)) {
+      console.log(`[Jordan] Using partial industry match: ${key}`);
+      return palette;
+    }
+  }
+  
+  // Priority 3: Vibe modifier
+  if (VIBE_MODIFIERS[vibeKey]) {
+    console.log(`[Jordan] Using vibe modifier: ${vibeKey}`);
+    return VIBE_MODIFIERS[vibeKey];
+  }
+  
+  // Priority 4: Partial vibe match
+  for (const [key, palette] of Object.entries(VIBE_MODIFIERS)) {
+    if (vibeKey.includes(key) || key.includes(vibeKey)) {
+      console.log(`[Jordan] Using partial vibe match: ${key}`);
+      return palette;
+    }
+  }
+  
+  // Fallback: Professional SaaS palette
+  console.log(`[Jordan] Using fallback palette for industry: ${industry}, vibe: ${vibe}`);
+  return { colors: ["#0A0A0A", "#3B82F6", "#FFFFFF", "#60A5FA", "#1E293B"], fonts: ["Inter", "DM Sans"] };
 }
 
 // Fal.ai Flux Schnell returns base64 data URIs, not hosted URLs.
@@ -108,10 +157,17 @@ export async function POST(
 
   if (!startup) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const vibe = brain?.brand_vibe ?? startup?.industry ?? "dark";
+  const vibe = brain?.brand_vibe ?? "professional";
   const name = brain?.startup_name ?? startup?.name ?? "Startup";
   const industry = startup?.industry ?? "technology";
-  const palette = getPalette(vibe);
+  
+  // Generate unique brand palette based on industry + vibe
+  const palette = generateBrandPalette(industry, vibe);
+  
+  console.log(`[Jordan] Generated brand for ${name}:`);
+  console.log(`[Jordan] Industry: ${industry}, Vibe: ${vibe}`);
+  console.log(`[Jordan] Colors: ${palette.colors.join(", ")}`);
+  console.log(`[Jordan] Fonts: ${palette.fonts.join(", ")}`);
 
   const bgPrompt = `Cinematic abstract background for "${name}", a ${industry} startup. ${vibe} aesthetic. Ultra high quality, 8k. No text, no logos, no UI elements, no people. Dark dramatic atmosphere, depth of field, professional photography.`;
   const texturePrompt = `Seamless subtle micro noise texture, ${vibe} aesthetic, fine grain, abstract minimal background overlay. Pure grayscale monochromatic. No text, no shapes, no objects. Just texture.`;
@@ -122,6 +178,10 @@ export async function POST(
       generateFluxImage(texturePrompt, supabase, `${startupId}/texture.jpg`),
     ]);
 
+    console.log(`[Jordan] Flux images generated:`);
+    console.log(`[Jordan] Background: ${bgUrl}`);
+    console.log(`[Jordan] Texture: ${textureUrl}`);
+
     await supabase.from("company_brain").update({
       flux_bg_url: bgUrl,
       flux_texture_url: textureUrl,
@@ -129,6 +189,8 @@ export async function POST(
       fonts: JSON.stringify(palette.fonts),
       updated_at: new Date().toISOString(),
     }).eq("startup_id", startupId);
+
+    console.log(`[Jordan] ✓ Brand assets saved to company_brain`);
 
     return NextResponse.json({ bgUrl, textureUrl, colors: palette.colors, fonts: palette.fonts });
   } catch (err) {

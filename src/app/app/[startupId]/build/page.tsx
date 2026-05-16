@@ -12,7 +12,7 @@ import {
   Download, GitBranch, Rocket, Sparkles,
   CreditCard, X,
 } from "lucide-react";
-import { BuildIDE } from "@/components/BuildIDE";
+import { ProfessionalIDE } from "@/components/ProfessionalIDE";
 import { supabase } from "@/lib/supabase";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -220,6 +220,8 @@ export default function BuildPage() {
   const [initDone, setInitDone] = useState(false);
   // File activity feed — most-recent first, populated from SSE code_chunk events
   const [recentFiles, setRecentFiles] = useState<string[]>([]);
+  // Show/hide build steps panel
+  const [showStepsPanel, setShowStepsPanel] = useState(true);
 
   const abortRef = useRef<AbortController | null>(null);
   const startedRef = useRef(false);
@@ -704,119 +706,120 @@ export default function BuildPage() {
       className="h-screen flex flex-col overflow-hidden"
       style={{ background: "#0A0A0A", color: "#F5F5F5" }}
     >
-      <TopBar
-        startupName={state.startupName}
-        buildType={buildType}
-        progress={progress}
-        isRunning={isRunning}
-        primaryColor={primary}
-        onStop={() => void handleStop()}
-      />
+      {/* Only show TopBar when build is in progress */}
+      {state.phase !== "complete" && (
+        <TopBar
+          startupName={state.startupName}
+          buildType={buildType}
+          progress={progress}
+          isRunning={isRunning}
+          primaryColor={primary}
+          onStop={() => void handleStop()}
+        />
+      )}
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Left panel — 60% */}
-        <div className="flex-[3] overflow-y-auto p-5 flex flex-col gap-3 min-w-0">
-
-          {STEPS.map(step => (
-            <StepCard
-              key={step.id}
-              step={step}
-              status={state.steps[step.id]}
-              code={state.stepCode[step.id] ?? ""}
-              files={state.stepFiles[step.id] ?? []}
-              currentFile={state.stepCurrentFile[step.id]}
-              fileContents={state.stepFileContents[step.id] ?? {}}
-              primaryColor={primary}
-            />
-          ))}
-
-          {/* Stopped */}
-          <AnimatePresence>
-            {state.phase === "stopped" && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="rounded-xl border px-5 py-4 flex items-center justify-between"
-                style={{ borderColor: "#2A2A2A", background: "#111111" }}
-              >
-                <div className="flex items-center gap-3">
-                  <Square size={15} style={{ color: "#525252" }} />
-                  <div>
-                    <p className="text-sm font-medium" style={{ color: "#A3A3A3" }}>Build stopped</p>
-                    <Link href={`/app/${startupId}`} className="text-xs" style={{ color: "#525252" }}>
-                      ← Back to report
-                    </Link>
-                  </div>
-                </div>
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={handleResume}
-                  className="text-xs rounded-lg px-3 py-1.5 font-semibold cursor-pointer"
-                  style={{
-                    background: `${primary}18`,
-                    color: primary,
-                    border: `1px solid ${primary}30`,
-                  }}
-                >
-                  Resume Build
-                </motion.button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Error */}
-          <AnimatePresence>
-            {state.phase === "error" && state.error && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-xl border px-5 py-4"
-                style={{ borderColor: "rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)" }}
-              >
-                <div className="flex items-start gap-3">
-                  <AlertCircle size={16} className="shrink-0 mt-0.5" style={{ color: "#EF4444" }} />
-                  <div>
-                    <p className="text-sm font-semibold mb-1" style={{ color: "#EF4444" }}>Build failed</p>
-                    <p
-                      className="text-xs font-mono break-all leading-relaxed"
-                      style={{ color: "#A3A3A3" }}
-                    >
-                      {state.error}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Delivery card */}
-          <AnimatePresence>
-            {state.phase === "complete" && (
-              <DeliveryCard
-                startupId={startupId}
-                fileCount={state.fileCount}
-                filePaths={state.filePaths}
-                onDeploy={() => void handleDeploy()}
-                deployError={state.deployError}
-                githubUrl={state.githubUrl}
-                vercelDeployUrl={state.vercelDeployUrl}
-                rileyGithubStatus={state.steps.riley_github}
-                rileyDeployStatus={state.steps.riley_deploy}
+        {/* Left panel — Build Steps (collapsible when complete) */}
+        {(showStepsPanel || state.phase !== "complete") && (
+          <div className="flex-[3] overflow-y-auto p-5 flex flex-col gap-3 min-w-0 border-r" style={{ borderColor: "#1F1F1F" }}>
+            {STEPS.map(step => (
+              <StepCard
+                key={step.id}
+                step={step}
+                status={state.steps[step.id]}
+                code={state.stepCode[step.id] ?? ""}
+                files={state.stepFiles[step.id] ?? []}
+                currentFile={state.stepCurrentFile[step.id]}
+                fileContents={state.stepFileContents[step.id] ?? {}}
                 primaryColor={primary}
-                credentials={state.credentials}
-                onCredentialsSaved={handleCredentialsSaved}
               />
-            )}
-          </AnimatePresence>
-        </div>
+            ))}
 
-        {/* Right panel — 40% */}
-        <div
-          className="hidden lg:flex flex-col flex-[2] border-l overflow-hidden"
-          style={{ borderColor: "#1F1F1F" }}
-        >
+            {/* Stopped */}
+            <AnimatePresence>
+              {state.phase === "stopped" && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="rounded-xl border px-5 py-4 flex items-center justify-between"
+                  style={{ borderColor: "#2A2A2A", background: "#111111" }}
+                >
+                  <div className="flex items-center gap-3">
+                    <Square size={15} style={{ color: "#525252" }} />
+                    <div>
+                      <p className="text-sm font-medium" style={{ color: "#A3A3A3" }}>Build stopped</p>
+                      <Link href={`/app/${startupId}`} className="text-xs" style={{ color: "#525252" }}>
+                        ← Back to report
+                      </Link>
+                    </div>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={handleResume}
+                    className="text-xs rounded-lg px-3 py-1.5 font-semibold cursor-pointer"
+                    style={{
+                      background: `${primary}18`,
+                      color: primary,
+                      border: `1px solid ${primary}30`,
+                    }}
+                  >
+                    Resume Build
+                  </motion.button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Error */}
+            <AnimatePresence>
+              {state.phase === "error" && state.error && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-xl border px-5 py-4"
+                  style={{ borderColor: "rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)" }}
+                >
+                  <div className="flex items-start gap-3">
+                    <AlertCircle size={16} className="shrink-0 mt-0.5" style={{ color: "#EF4444" }} />
+                    <div>
+                      <p className="text-sm font-semibold mb-1" style={{ color: "#EF4444" }}>Build failed</p>
+                      <p
+                        className="text-xs font-mono break-all leading-relaxed"
+                        style={{ color: "#A3A3A3" }}
+                      >
+                        {state.error}
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Delivery card */}
+            <AnimatePresence>
+              {state.phase === "complete" && (
+                <DeliveryCard
+                  startupId={startupId}
+                  fileCount={state.fileCount}
+                  filePaths={state.filePaths}
+                  onDeploy={() => void handleDeploy()}
+                  deployError={state.deployError}
+                  githubUrl={state.githubUrl}
+                  vercelDeployUrl={state.vercelDeployUrl}
+                  rileyGithubStatus={state.steps.riley_github}
+                  rileyDeployStatus={state.steps.riley_deploy}
+                  primaryColor={primary}
+                  credentials={state.credentials}
+                  onCredentialsSaved={handleCredentialsSaved}
+                />
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {/* Right panel — IDE or Brand Panel */}
+        <div className="flex-1 flex flex-col overflow-hidden">
           <AnimatePresence mode="wait">
             {state.phase === "complete" && Object.keys(state.fileMap).length > 0 ? (
               <motion.div
@@ -827,7 +830,13 @@ export default function BuildPage() {
                 transition={{ duration: 0.4 }}
                 className="flex flex-col h-full"
               >
-                <BuildIDE files={state.fileMap} />
+                <ProfessionalIDE
+                  files={state.fileMap}
+                  startupName={state.startupName}
+                  onDownloadZip={() => window.open(`/api/startups/${startupId}/download`, "_blank")}
+                  showStepsPanel={showStepsPanel}
+                  onToggleStepsPanel={() => setShowStepsPanel(!showStepsPanel)}
+                />
               </motion.div>
             ) : (
               <motion.div
@@ -1545,204 +1554,300 @@ function DeliveryCard({
           )}
         </AnimatePresence>
 
-        {/* Post-deploy: GitHub + Vercel + env vars */}
+        {/* Credentials section — visible after build completes */}
         <AnimatePresence>
-          {isDeployed && (
+          {fileCount > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
               className="flex flex-col gap-3 mb-4"
             >
-              {/* ── GitHub */}
+              {/* ── Supabase Connection */}
               <div
-                className="rounded-xl border p-3"
-                style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
+                className="rounded-xl border p-4"
+                style={{
+                  borderColor: credentials ? "rgba(16,185,129,0.3)" : "rgba(99,102,241,0.3)",
+                  background: credentials ? "rgba(16,185,129,0.04)" : "rgba(99,102,241,0.04)"
+                }}
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-semibold" style={{ color: "#10B981" }}>✅ Code pushed to GitHub</span>
-                </div>
-                {githubUrl && (
-                  <a
-                    href={githubUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 rounded-lg border px-3 py-2 transition-opacity hover:opacity-80"
-                    style={{ borderColor: "#1A1A1A", background: "#111111" }}
-                  >
-                    <GitBranch size={12} style={{ color: "#525252", flexShrink: 0 }} />
-                    <span className="flex-1 text-xs font-mono truncate" style={{ color: "#A3A3A3" }}>
-                      {githubUrl.replace("https://github.com/", "")}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold" style={{ color: "#F5F5F5" }}>
+                      {credentials ? "✅" : "🔌"} Connect Supabase
                     </span>
-                    <ExternalLink size={10} style={{ color: "#525252", flexShrink: 0 }} />
-                  </a>
-                )}
-              </div>
-
-              {/* ── Vercel */}
-              <div
-                className="rounded-xl border p-3"
-                style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-semibold" style={{ color: "#F5F5F5" }}>🚀 Deploy to Vercel</span>
+                  </div>
+                  {credentials && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.15)", color: "#10B981" }}>
+                      Connected
+                    </span>
+                  )}
                 </div>
-                <p className="text-[11px] mb-3" style={{ color: "#525252" }}>
-                  Click below to deploy to <span style={{ color: "#A3A3A3" }}>your own</span> Vercel account — free, takes ~60 seconds
+                <p className="text-xs mb-3" style={{ color: "#A3A3A3" }}>
+                  {credentials
+                    ? "Your Supabase credentials are saved. You can update them anytime."
+                    : "Connect your Supabase project to auto-fill database credentials"}
                 </p>
-                {vercelDeployUrl && (
+                {!credentials ? (
                   <motion.a
-                    href={vercelDeployUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.97 }}
-                    className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold transition-opacity hover:opacity-90"
+                    href={`/app/${startupId}/connect-supabase`}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold cursor-pointer transition-opacity hover:opacity-90"
                     style={{
-                      background: "#000",
+                      background: "#6366F1",
                       color: "#fff",
-                      border: "1px solid #333",
-                      boxShadow: "0 0 16px rgba(255,255,255,0.06)",
+                      boxShadow: "0 0 20px rgba(99,102,241,0.25)",
                     }}
                   >
-                    <Rocket size={13} />
-                    Deploy to Vercel →
+                    <Sparkles size={12} />
+                    Connect Supabase Project
                   </motion.a>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2 text-xs" style={{ color: "#10B981" }}>
+                      <CheckCircle2 size={12} />
+                      <span className="font-mono">{credentials.supabase_project_url?.replace("https://", "").slice(0, 30)}...</span>
+                    </div>
+                    <motion.a
+                      href={`/app/${startupId}/connect-supabase`}
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="text-xs text-center py-2 rounded-lg cursor-pointer transition-opacity hover:opacity-80"
+                      style={{ background: "#0D0D0D", color: "#A3A3A3", border: "1px solid #1F1F1F" }}
+                    >
+                      Update Credentials
+                    </motion.a>
+                  </div>
                 )}
               </div>
 
-              {/* ── Env vars */}
+              {/* ── Payment Keys */}
               <div
-                className="rounded-xl border p-3"
-                style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
+                className="rounded-xl border p-4"
+                style={{
+                  borderColor: anyPaymentConnected ? "rgba(16,185,129,0.3)" : "#1F1F1F",
+                  background: anyPaymentConnected ? "rgba(16,185,129,0.04)" : "#0D0D0D"
+                }}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold" style={{ color: "#A3A3A3" }}>⚙️ Required env vars in Vercel</span>
-                  <motion.button
-                    whileHover={{ scale: 1.04 }}
-                    whileTap={{ scale: 0.96 }}
-                    onClick={handleCopyEnvVars}
-                    className="text-[10px] rounded-md px-2 py-0.5 cursor-pointer transition-colors"
-                    style={{
-                      background: envCopied ? "rgba(16,185,129,0.12)" : "#161616",
-                      color: envCopied ? "#10B981" : "#525252",
-                      border: `1px solid ${envCopied ? "rgba(16,185,129,0.2)" : "#222"}`,
-                    }}
-                  >
-                    {envCopied ? "Copied!" : "Copy all"}
-                  </motion.button>
-                </div>
-
-                {/* Connect Supabase CTA */}
-                {!credentials && (
-                  <motion.a
-                    href={`/api/auth/supabase?startupId=${startupId}`}
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex items-center gap-2 rounded-lg px-3 py-2 mb-2 text-xs font-medium cursor-pointer transition-opacity hover:opacity-90"
-                    style={{
-                      background: "rgba(99,102,241,0.1)",
-                      color: "#818CF8",
-                      border: "1px solid rgba(99,102,241,0.25)",
-                    }}
-                  >
-                    <Sparkles size={11} />
-                    Connect Supabase — auto-fill these values
-                  </motion.a>
-                )}
-
-                {/* Payment keys — connected status chips + Add/Edit button */}
-                <div className="flex flex-col gap-1.5 mb-2">
-                  {stripeConnected && (
-                    <div
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
-                      style={{ background: "rgba(16,185,129,0.07)", color: "#10B981", border: "1px solid rgba(16,185,129,0.18)" }}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#10B981" }} />
-                      <span className="flex-1 font-medium">Stripe · {maskKey(credentials?.stripe_publishable_key)}</span>
-                      <button
-                        onClick={() => openModal("stripe")}
-                        className="text-[9px] cursor-pointer transition-opacity hover:opacity-70"
-                        style={{ color: "#525252" }}
-                      >
-                        Edit
-                      </button>
-                    </div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold" style={{ color: "#F5F5F5" }}>
+                      {anyPaymentConnected ? "✅" : "💳"} Payment Keys
+                    </span>
+                  </div>
+                  {anyPaymentConnected && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.15)", color: "#10B981" }}>
+                      {[stripeConnected && "Stripe", razorpayConnected && "Razorpay"].filter(Boolean).join(" + ")}
+                    </span>
                   )}
-                  {razorpayConnected && (
-                    <div
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
-                      style={{ background: "rgba(16,185,129,0.07)", color: "#10B981", border: "1px solid rgba(16,185,129,0.18)" }}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#10B981" }} />
-                      <span className="flex-1 font-medium">Razorpay · {maskKey(credentials?.razorpay_key_id)}</span>
-                      <button
-                        onClick={() => openModal("razorpay")}
-                        className="text-[9px] cursor-pointer transition-opacity hover:opacity-70"
-                        style={{ color: "#525252" }}
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  )}
-                  <motion.button
-                    onClick={() => openModal(!stripeConnected ? "stripe" : "razorpay")}
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium cursor-pointer transition-opacity hover:opacity-90"
-                    style={{
-                      background: anyPaymentConnected ? "#0D0D0D" : "rgba(99,102,241,0.07)",
-                      color: anyPaymentConnected ? "#525252" : "#A5B4FC",
-                      border: `1px solid ${anyPaymentConnected ? "#1A1A1A" : "rgba(99,102,241,0.2)"}`,
-                    }}
-                  >
-                    <CreditCard size={11} />
-                    {anyPaymentConnected
-                      ? (!stripeConnected || !razorpayConnected)
-                        ? `Add ${!stripeConnected ? "Stripe" : "Razorpay"} keys`
-                        : "Edit payment keys"
-                      : "Add Payment Keys — Stripe or Razorpay"}
-                  </motion.button>
                 </div>
-
-                {/* Var list */}
-                <div className="flex flex-col gap-1">
-                  {displayVars.map(v => {
-                    const entry = credMap[v];
-                    const filled = !!entry?.display;
-                    return (
-                      <div
-                        key={v}
-                        className="flex items-center gap-2 rounded-md px-2 py-1"
-                        style={{ background: "#0A0A0A" }}
-                      >
-                        <span
-                          className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ background: filled ? "#10B981" : "#2A2A2A" }}
-                        />
-                        <span className="text-[10px] font-mono flex-1 truncate" style={{ color: filled ? "#A3A3A3" : "#525252" }}>
-                          {v}
-                        </span>
-                        {filled && (
-                          <span className="text-[9px] font-mono shrink-0" style={{ color: "#3A5A3A" }}>
-                            {entry.display}
-                          </span>
-                        )}
+                <p className="text-xs mb-3" style={{ color: "#A3A3A3" }}>
+                  {anyPaymentConnected
+                    ? "Your payment provider keys are saved securely"
+                    : "Add Stripe or Razorpay keys to enable payments in your app"}
+                </p>
+                
+                {/* Connected payment providers */}
+                {(stripeConnected || razorpayConnected) && (
+                  <div className="flex flex-col gap-2 mb-3">
+                    {stripeConnected && (
+                      <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)" }}>
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 size={12} style={{ color: "#10B981" }} />
+                          <span className="text-xs font-medium" style={{ color: "#10B981" }}>Stripe</span>
+                          <span className="text-[10px] font-mono" style={{ color: "#525252" }}>{maskKey(credentials?.stripe_publishable_key)}</span>
+                        </div>
+                        <button
+                          onClick={() => openModal("stripe")}
+                          className="text-[10px] px-2 py-1 rounded cursor-pointer transition-opacity hover:opacity-70"
+                          style={{ background: "#0D0D0D", color: "#A3A3A3" }}
+                        >
+                          Edit
+                        </button>
                       </div>
-                    );
-                  })}
-                </div>
-
-                {(credentials || anyPaymentConnected) && (
-                  <p className="text-[9px] mt-2" style={{ color: "#2A2A2A" }}>
-                    {[
-                      credentials && "✓ Supabase",
-                      stripeConnected && "✓ Stripe",
-                      razorpayConnected && "✓ Razorpay",
-                    ].filter(Boolean).join(" · ")} · values shown masked
-                  </p>
+                    )}
+                    {razorpayConnected && (
+                      <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)" }}>
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 size={12} style={{ color: "#10B981" }} />
+                          <span className="text-xs font-medium" style={{ color: "#10B981" }}>Razorpay</span>
+                          <span className="text-[10px] font-mono" style={{ color: "#525252" }}>{maskKey(credentials?.razorpay_key_id)}</span>
+                        </div>
+                        <button
+                          onClick={() => openModal("razorpay")}
+                          className="text-[10px] px-2 py-1 rounded cursor-pointer transition-opacity hover:opacity-70"
+                          style={{ background: "#0D0D0D", color: "#A3A3A3" }}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
+
+                {/* Add/Edit button */}
+                <motion.button
+                  onClick={() => openModal(!stripeConnected ? "stripe" : "razorpay")}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold cursor-pointer transition-opacity hover:opacity-90"
+                  style={{
+                    background: anyPaymentConnected ? "#0D0D0D" : "#6366F1",
+                    color: anyPaymentConnected ? "#A3A3A3" : "#fff",
+                    border: `1px solid ${anyPaymentConnected ? "#1F1F1F" : "transparent"}`,
+                    boxShadow: anyPaymentConnected ? "none" : "0 0 20px rgba(99,102,241,0.25)",
+                  }}
+                >
+                  <CreditCard size={12} />
+                  {anyPaymentConnected
+                    ? (!stripeConnected || !razorpayConnected)
+                      ? `Add ${!stripeConnected ? "Stripe" : "Razorpay"}`
+                      : "Manage Payment Keys"
+                    : "Add Payment Keys"}
+                </motion.button>
               </div>
+
+              {/* ── GitHub (only after deployment) */}
+              {isDeployed && (
+                <div
+                  className="rounded-xl border p-3"
+                  style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-semibold" style={{ color: "#10B981" }}>✅ Code pushed to GitHub</span>
+                  </div>
+                  {githubUrl && (
+                    <a
+                      href={githubUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 rounded-lg border px-3 py-2 transition-opacity hover:opacity-80"
+                      style={{ borderColor: "#1A1A1A", background: "#111111" }}
+                    >
+                      <GitBranch size={12} style={{ color: "#525252", flexShrink: 0 }} />
+                      <span className="flex-1 text-xs font-mono truncate" style={{ color: "#A3A3A3" }}>
+                        {githubUrl.replace("https://github.com/", "")}
+                      </span>
+                      <ExternalLink size={10} style={{ color: "#525252", flexShrink: 0 }} />
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* ── Vercel Deploy + Env Vars (only after GitHub push) */}
+              {isDeployed && vercelDeployUrl && (
+                <>
+                  <div
+                    className="rounded-xl border p-4"
+                    style={{ borderColor: "rgba(99,102,241,0.3)", background: "rgba(99,102,241,0.04)" }}
+                  >
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-sm font-bold" style={{ color: "#F5F5F5" }}>🚀 Deploy to Vercel</span>
+                    </div>
+                    <p className="text-xs mb-3" style={{ color: "#A3A3A3" }}>
+                      Your code is on GitHub. Deploy to Vercel now (free, ~60 seconds)
+                    </p>
+                    <motion.a
+                      href={vercelDeployUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.97 }}
+                      className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-opacity hover:opacity-90"
+                      style={{
+                        background: "#000",
+                        color: "#fff",
+                        border: "1px solid #333",
+                        boxShadow: "0 0 24px rgba(255,255,255,0.1)",
+                      }}
+                    >
+                      <Rocket size={15} />
+                      Deploy to Vercel →
+                    </motion.a>
+                    {githubUrl && (
+                      <a
+                        href={githubUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 mt-3 py-2 rounded-lg transition-opacity hover:opacity-70"
+                        style={{ color: "#525252" }}
+                      >
+                        <GitBranch size={11} />
+                        <span className="text-[10px]">View on GitHub</span>
+                        <ExternalLink size={9} />
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Environment Variables Checklist */}
+                  <div
+                    className="rounded-xl border p-4"
+                    style={{ borderColor: "#1F1F1F", background: "#0D0D0D" }}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-bold" style={{ color: "#F5F5F5" }}>⚙️ Environment Variables</span>
+                      <motion.button
+                        whileHover={{ scale: 1.04 }}
+                        whileTap={{ scale: 0.96 }}
+                        onClick={handleCopyEnvVars}
+                        className="text-[10px] font-semibold rounded-lg px-3 py-1.5 cursor-pointer transition-colors"
+                        style={{
+                          background: envCopied ? "rgba(16,185,129,0.15)" : "#161616",
+                          color: envCopied ? "#10B981" : "#A3A3A3",
+                          border: `1px solid ${envCopied ? "rgba(16,185,129,0.25)" : "#222"}`,
+                        }}
+                      >
+                        {envCopied ? "✓ Copied!" : "Copy All"}
+                      </motion.button>
+                    </div>
+                    <p className="text-xs mb-3" style={{ color: "#A3A3A3" }}>
+                      Add these in Vercel: Settings → Environment Variables
+                    </p>
+
+                    {/* Var checklist */}
+                    <div className="flex flex-col gap-1.5">
+                      {displayVars.map(v => {
+                        const entry = credMap[v];
+                        const filled = !!entry?.display;
+                        return (
+                          <div
+                            key={v}
+                            className="flex items-center gap-2 rounded-lg px-3 py-2"
+                            style={{
+                              background: filled ? "rgba(16,185,129,0.06)" : "#0A0A0A",
+                              border: `1px solid ${filled ? "rgba(16,185,129,0.2)" : "#1A1A1A"}`
+                            }}
+                          >
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ background: filled ? "#10B981" : "#2A2A2A" }}
+                            />
+                            <span className="text-xs font-mono flex-1" style={{ color: filled ? "#10B981" : "#525252", fontWeight: filled ? 500 : 400 }}>
+                              {v}
+                            </span>
+                            {filled && (
+                              <span className="text-[10px] font-mono shrink-0" style={{ color: "#525252" }}>
+                                {entry.display}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {(credentials || anyPaymentConnected) && (
+                      <p className="text-[10px] mt-3 text-center" style={{ color: "#3A3A3A" }}>
+                        {[
+                          credentials && "✓ Supabase",
+                          stripeConnected && "✓ Stripe",
+                          razorpayConnected && "✓ Razorpay",
+                        ].filter(Boolean).join(" · ")} connected
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

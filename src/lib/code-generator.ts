@@ -57,101 +57,227 @@ export async function generateLandingPage(
   brain: CodeGenBrain,
   onChunk?: (chunk: string) => void
 ): Promise<string> {
-  const [primary, secondary, accent] = brain.colors;
+  const [bg, primary, secondary, accent, text] = brain.colors;
   const [displayFont, bodyFont] = brain.fonts;
   const fluxBg = brain.flux_bg_url?.startsWith("data:") ? "" : (brain.flux_bg_url ?? "");
   const fluxTexture = brain.flux_texture_url?.startsWith("data:") ? "" : (brain.flux_texture_url ?? "");
 
-  // FIX 2: Dynamic layout based on brand_vibe
-  const vibe = brain.brand_vibe.toLowerCase();
-  let layoutInstruction: string;
-  if (vibe.includes("dark") || vibe.includes("minimal")) {
-    layoutInstruction =
-      "Full viewport hero, large asymmetric typography, minimal navbar, content revealed on scroll";
-  } else if (vibe.includes("playful") || vibe.includes("bold")) {
-    layoutInstruction =
-      "Colorful sections, large emoji accents, rounded cards, fun micro-interactions";
-  } else if (vibe.includes("professional") || vibe.includes("corporate")) {
-    layoutInstruction =
-      "Clean grid layout, trust signals above fold, case study style sections";
-  } else {
-    layoutInstruction =
-      "Full viewport hero, bold typography, smooth scroll sections, strong CTA hierarchy";
+  console.log(`[Morgan] Building landing page for ${brain.startup_name}`);
+  console.log(`[Morgan] Using colors: ${brain.colors.join(", ")}`);
+  console.log(`[Morgan] Using fonts: ${brain.fonts.join(", ")}`);
+  console.log(`[Morgan] Flux BG URL: ${fluxBg ? "✓ Present" : "✗ Missing"}`);
+
+  const prompt = `You are building a PREMIUM, production-ready Next.js 14 landing page for "${brain.startup_name}".
+
+═══════════════════════════════════════════════════════════════════════════════
+STARTUP IDENTITY
+═══════════════════════════════════════════════════════════════════════════════
+Name: ${brain.startup_name}
+Industry: ${brain.tech_stack ?? "SaaS"}
+Idea: ${brain.idea.slice(0, 250)}
+Target Audience: ${brain.audience.slice(0, 150)}
+Positioning: ${brain.positioning.slice(0, 150)}
+Brand Vibe: ${brain.brand_vibe}
+
+═══════════════════════════════════════════════════════════════════════════════
+BRAND COLORS — USE THESE EXACT VALUES EVERYWHERE
+═══════════════════════════════════════════════════════════════════════════════
+Background: ${bg}
+Primary: ${primary}
+Secondary: ${secondary}
+Accent: ${accent}
+Text: ${text}
+
+Define these as CSS variables at the top of your component:
+<style jsx global>{\`
+  :root {
+    --color-bg: ${bg};
+    --color-primary: ${primary};
+    --color-secondary: ${secondary};
+    --color-accent: ${accent};
+    --color-text: ${text};
   }
+\`}</style>
 
-  // CSS custom properties string for all brand colors
-  const cssVars = brain.colors
-    .map((c, i) => `--color-${["bg", "primary", "secondary", "accent"][i] ?? `c${i}`}: ${c};`)
-    .join(" ");
+═══════════════════════════════════════════════════════════════════════════════
+TYPOGRAPHY — IMPORT AND USE THESE EXACT GOOGLE FONTS
+═══════════════════════════════════════════════════════════════════════════════
+Display Font (headings, hero, CTAs): "${displayFont}"
+Body Font (paragraphs, UI text): "${bodyFont}"
 
-  const prompt = `Create a stunning, production-ready Next.js landing page for "${brain.startup_name}".
+Import at the top of your component:
+import { ${displayFont.replace(/\s+/g, "_")}, ${bodyFont.replace(/\s+/g, "_")} } from "next/font/google";
 
-This is a PREMIUM startup website. Every section must look unique and custom-designed for this specific brand.
+const displayFont = ${displayFont.replace(/\s+/g, "_")}({ subsets: ["latin"], weight: ["700", "800"] });
+const bodyFont = ${bodyFont.replace(/\s+/g, "_")}({ subsets: ["latin"], weight: ["400", "500", "600"] });
 
-STARTUP CONTEXT:
-- Industry: ${brain.tech_stack ?? "SaaS"}
-- Target audience: ${brain.audience.slice(0, 100)}
-- Brand vibe: ${brain.brand_vibe.slice(0, 100)}
-- Key value proposition: ${brain.idea.slice(0, 200)}
+Apply fonts:
+- All <h1>, <h2>, <h3>, hero text, CTA buttons → className={displayFont.className}
+- All <p>, <span>, body text → className={bodyFont.className}
 
-BRAND IDENTITY — define these in a <style> tag or global CSS :root block at the top of the component:
-\`:root {
-  ${cssVars}
-}\`
-- Primary color: ${primary}
-- Secondary color: ${secondary}
-- Accent color: ${accent}
-- Display font: "${displayFont}" — use this for ALL headings and hero text (import from Google Fonts)
-- Body font: "${bodyFont}" — use this for paragraphs and UI text (import from Google Fonts)
-
-LAYOUT INSTRUCTION (based on brand vibe "${brain.brand_vibe}"):
-${layoutInstruction}
-
-HERO BACKGROUND — CRITICAL — COPY THIS EXACTLY INTO YOUR JSX:
+═══════════════════════════════════════════════════════════════════════════════
+HERO BACKGROUND IMAGE — CRITICAL REQUIREMENT
+═══════════════════════════════════════════════════════════════════════════════
 ${fluxBg
-  ? `The hero section MUST use this exact inline style object — do not paraphrase, do not omit the URL:
+  ? `The hero section MUST use this EXACT background image URL. Copy this style object LITERALLY into your JSX:
+
+<section
+  className="relative min-h-screen flex items-center justify-center"
   style={{
     backgroundImage: "url('${fluxBg}')",
     backgroundSize: "cover",
     backgroundPosition: "center",
     backgroundRepeat: "no-repeat",
-    minHeight: "100vh",
-    position: "relative",
   }}
-Inside the hero, add a dark overlay as the first child element:
-  <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)" }} />
-This overlay ensures text readability. All hero text goes AFTER this overlay div (use position: relative and z-index: 1).
-DO NOT replace this backgroundImage with a gradient. The URL must appear literally in the rendered JSX.`
-  : `flux_bg_url is empty — use an animated CSS mesh gradient hero using the brand colors above`}
+>
+  {/* Dark overlay for text readability */}
+  <div className="absolute inset-0 bg-black/60" />
+  
+  {/* Hero content with z-index to appear above overlay */}
+  <div className="relative z-10 container mx-auto px-6 text-center">
+    {/* Your hero content here */}
+  </div>
+</section>
+
+DO NOT:
+- Replace the URL with a gradient
+- Omit the backgroundImage property
+- Use a different image
+- Skip the dark overlay
+
+The URL ${fluxBg} MUST appear in the final code.`
+  : `No Flux background provided. Create an animated mesh gradient hero using the brand colors: ${bg}, ${primary}, ${secondary}, ${accent}`}
+
 ${fluxTexture
-  ? `TEXTURE OVERLAY: Apply this URL as a noise texture across the ENTIRE page at 5% opacity using a fixed-position wrapper div as the very first element inside the root:
-  <div style={{ position: "fixed", inset: 0, backgroundImage: "url('${fluxTexture}')", opacity: 0.05, pointerEvents: "none", zIndex: 0 }} />`
+  ? `
+TEXTURE OVERLAY (optional enhancement):
+Add this as the FIRST element inside your root component for subtle texture:
+<div
+  className="fixed inset-0 pointer-events-none z-0 opacity-5"
+  style={{ backgroundImage: "url('${fluxTexture}')" }}
+/>`
   : ""}
 
-REQUIRED SECTIONS (in order):
-1. Navigation — Logo + startup name left, CTA button right
-2. Hero — Full viewport, background EXACTLY as specified above, startup name as H1 in ${displayFont}, one-line value prop, two CTA buttons (primary + secondary)
-3. Features — 3 features with Lucide icons, relevant to this specific product, each with a unique layout (not a uniform 3-column card grid)
-4. Social proof — 3 testimonial cards with real-sounding names and quotes specific to this product's value
-5. Pricing — Free tier + Pro tier with feature list
-6. Final CTA — bold conversion section with email waitlist form
-7. Footer — minimal, links
+═══════════════════════════════════════════════════════════════════════════════
+REQUIRED SECTIONS — BUILD IN THIS EXACT ORDER
+═══════════════════════════════════════════════════════════════════════════════
 
-HARD BANS — violating any of these makes the output unacceptable:
-- DO NOT use purple gradients or blue-to-purple gradients anywhere — use ${primary} and ${secondary} only
-- DO NOT use Inter as the only font — "${displayFont}" is REQUIRED for every heading, hero text, and display element
-- DO NOT use generic card layouts where every section looks the same (3 equal cards side by side)
-- DO NOT use "Acme Corp", "Company", or any placeholder name — always "${brain.startup_name}"
-- DO NOT use empty placeholder text — write real, specific copy for this exact startup and its audience
-- DO NOT use boring hover states — every interactive element needs a unique micro-interaction
+1. NAVIGATION BAR
+   - Fixed top, backdrop blur
+   - Logo + "${brain.startup_name}" on left
+   - Primary CTA button on right (use ${primary} color)
+   - Mobile hamburger menu
 
-REQUIRED QUALITY BARS:
-- ALWAYS Framer Motion: fadeInUp with staggerChildren for every section reveal
-- ALWAYS fully mobile responsive with proper breakpoints
-- ALWAYS dark theme unless brand palette is explicitly light
-- ALWAYS write copy as if you are the startup's actual marketing team
+2. HERO SECTION
+   - Full viewport height (min-h-screen)
+   - Background image as specified above
+   - H1: "${brain.startup_name}" in ${displayFont}
+   - Tagline: One compelling sentence about ${brain.idea.slice(0, 100)}
+   - Two CTA buttons: "Get Started" (${primary}) + "Learn More" (outline)
+   - Framer Motion: fadeIn animation on mount
 
-Return ONLY the complete TypeScript React component code. No explanation. No markdown fences. Start directly with "use client";`;
+3. FEATURES SECTION
+   - Title: "Why ${brain.startup_name}?"
+   - 3-4 feature cards relevant to ${brain.idea.slice(0, 80)}
+   - Each card: Lucide icon, title, description
+   - Unique layouts (not uniform grid) — stagger cards, alternate left/right
+   - Framer Motion: staggerChildren, each card slides up on scroll
+
+4. HOW IT WORKS
+   - Title: "How It Works"
+   - 3 steps with numbers, icons, descriptions
+   - Timeline or flow diagram layout
+   - Framer Motion: sequential reveal on scroll
+
+5. TESTIMONIALS
+   - Title: "What People Say"
+   - 3 testimonial cards with:
+     * Real-sounding name (not "John Doe")
+     * Role/company relevant to ${brain.audience.slice(0, 50)}
+     * Quote specific to ${brain.idea.slice(0, 80)} value
+   - Framer Motion: fade in with slight rotation
+
+6. PRICING
+   - Title: "Simple Pricing"
+   - 2-3 tiers: Free, Pro, Enterprise
+   - Feature lists relevant to ${brain.revenue_model}
+   - CTA buttons (${primary} for recommended tier)
+   - Framer Motion: scale up on scroll
+
+7. FINAL CTA
+   - Bold headline: "Ready to get started?"
+   - Email waitlist form (input + submit button)
+   - Use ${primary} for submit button
+   - Framer Motion: pulse animation on CTA
+
+8. FOOTER
+   - Links: About, Privacy, Terms, Contact
+   - Social icons (optional)
+   - Copyright © 2024 ${brain.startup_name}
+
+═══════════════════════════════════════════════════════════════════════════════
+FRAMER MOTION ANIMATIONS — REQUIRED FOR EVERY SECTION
+═══════════════════════════════════════════════════════════════════════════════
+
+Import: import { motion } from "framer-motion";
+
+Animation variants to use:
+
+const fadeInUp = {
+  hidden: { opacity: 0, y: 60 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+};
+
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.2 } }
+};
+
+Apply to sections:
+<motion.section
+  initial="hidden"
+  whileInView="visible"
+  viewport={{ once: true, margin: "-100px" }}
+  variants={fadeInUp}
+>
+
+For card grids:
+<motion.div variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true }}>
+  {items.map(item => (
+    <motion.div key={item.id} variants={fadeInUp}>
+      {/* card content */}
+    </motion.div>
+  ))}
+</motion.div>
+
+═══════════════════════════════════════════════════════════════════════════════
+QUALITY REQUIREMENTS — NON-NEGOTIABLE
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ Use ONLY the provided brand colors (${bg}, ${primary}, ${secondary}, ${accent}, ${text})
+✓ Use ONLY the provided fonts (${displayFont}, ${bodyFont})
+✓ Include Flux background image URL ${fluxBg ? "EXACTLY as provided" : "(not provided)"}
+✓ Every section has Framer Motion animations
+✓ Fully responsive (mobile, tablet, desktop breakpoints)
+✓ Real, specific copy — NO generic placeholders like "Lorem ipsum" or "Acme Corp"
+✓ Write as if you're the actual marketing team for ${brain.startup_name}
+✓ Unique layouts — avoid repetitive 3-column card grids
+✓ Interactive hover states on all buttons and cards
+✓ Dark theme aesthetic (unless brand colors are explicitly light)
+
+✗ DO NOT use purple/blue gradients
+✗ DO NOT use Inter as the only font
+✗ DO NOT use placeholder company names
+✗ DO NOT skip Framer Motion animations
+✗ DO NOT ignore the Flux background image URL
+
+═══════════════════════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════════════════════
+
+Return ONLY the complete TypeScript React component code.
+Start with: "use client";
+No markdown fences. No explanations. Just the code.`;
 
   const code = await callV0(prompt, onChunk);
   return code || `"use client";\nexport default function Page() { return <main style={{background:"#0A0A0A",color:"#F5F5F5",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><h1 style={{fontSize:"3rem",fontWeight:700}}>${brain.startup_name}</h1></main>; }`;
@@ -161,32 +287,71 @@ async function generateAuthPage(
   brain: CodeGenBrain,
   onChunk?: (chunk: string) => void
 ): Promise<string> {
-  const [primary, secondary] = brain.colors;
-  const [displayFont] = brain.fonts;
+  const [bg, primary, secondary, accent, text] = brain.colors;
+  const [displayFont, bodyFont] = brain.fonts;
 
-  const prompt = `Create a polished Next.js auth page for "${brain.startup_name}".
+  const prompt = `Create a polished Next.js 14 auth page for "${brain.startup_name}".
 
-BRAND:
-- Primary color: ${primary}
-- Secondary color: ${secondary}
-- Display font: "${displayFont}"
-- Dark theme: background #0A0A0A, cards #111111, borders #1F1F1F
+═══════════════════════════════════════════════════════════════════════════════
+BRAND IDENTITY
+═══════════════════════════════════════════════════════════════════════════════
+Colors:
+- Background: ${bg}
+- Primary: ${primary}
+- Secondary: ${secondary}
+- Accent: ${accent}
+- Text: ${text}
 
-REQUIRED:
-1. Centered card layout, max-width 420px
-2. App logo / name at top using display font
-3. "Continue with Google" OAuth button (primary color)
-4. Email + password fields with dark styling
-5. Sign In / Sign Up toggle
-6. Framer Motion fade-in animation on mount
-7. Fully responsive
+Fonts:
+- Display: "${displayFont}" (for logo, headings)
+- Body: "${bodyFont}" (for form labels, text)
 
-USE:
-- createClient() from "@/lib/supabase" for auth
-- supabase.auth.signInWithOAuth({ provider: "google" }) for Google
-- supabase.auth.signInWithPassword() for email/password
-- Redirect to /dashboard after login
-- Lucide React icons only
+Import fonts from next/font/google and apply via className.
+
+═══════════════════════════════════════════════════════════════════════════════
+LAYOUT REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════════════
+1. Full-screen centered layout (min-h-screen flex items-center justify-center)
+2. Auth card: max-w-md, rounded-2xl, backdrop blur, border
+3. Logo/brand name at top in ${displayFont}
+4. "Continue with Google" button (${primary} background)
+5. Divider: "or continue with email"
+6. Email + password inputs with proper styling
+7. "Sign In" / "Sign Up" toggle
+8. Framer Motion: card slides up + fades in on mount
+9. Fully responsive
+
+═══════════════════════════════════════════════════════════════════════════════
+AUTHENTICATION LOGIC
+═══════════════════════════════════════════════════════════════════════════════
+Import: import { createClient } from "@/lib/supabase";
+
+Google OAuth:
+const supabase = createClient();
+await supabase.auth.signInWithOAuth({
+  provider: "google",
+  options: { redirectTo: window.location.origin + "/api/auth/callback" }
+});
+
+Email/Password:
+await supabase.auth.signInWithPassword({ email, password });
+// or
+await supabase.auth.signUp({ email, password });
+
+Redirect to /dashboard after successful login.
+
+═══════════════════════════════════════════════════════════════════════════════
+FRAMER MOTION ANIMATION
+═══════════════════════════════════════════════════════════════════════════════
+import { motion } from "framer-motion";
+
+<motion.div
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.5 }}
+>
+  {/* Auth card content */}
+</motion.div>
 
 Return ONLY the complete TypeScript React component code starting with "use client";`;
 
@@ -217,37 +382,99 @@ async function generateDashboardPage(
   brain: CodeGenBrain,
   onChunk?: (chunk: string) => void
 ): Promise<string> {
-  const [primary, secondary] = brain.colors;
-  const [displayFont] = brain.fonts;
+  const [bg, primary, secondary, accent, text] = brain.colors;
+  const [displayFont, bodyFont] = brain.fonts;
 
-  const prompt = `Create a user dashboard page for "${brain.startup_name}" (Next.js, TypeScript).
+  const prompt = `Create a user dashboard page for "${brain.startup_name}" (Next.js 14, TypeScript).
 
-PRODUCT CONTEXT:
-- Product: ${brain.idea.slice(0, 150)}
-- Audience: ${brain.audience.slice(0, 80)}
-- Revenue model: ${brain.revenue_model}
+═══════════════════════════════════════════════════════════════════════════════
+PRODUCT CONTEXT
+═══════════════════════════════════════════════════════════════════════════════
+Product: ${brain.idea.slice(0, 200)}
+Audience: ${brain.audience.slice(0, 100)}
+Revenue Model: ${brain.revenue_model}
 
-BRAND:
-- Primary color: ${primary}
-- Secondary color: ${secondary}
-- Display font: "${displayFont}"
-- Dark theme: background #0A0A0A, sidebar #0D0D0D, cards #111111
+═══════════════════════════════════════════════════════════════════════════════
+BRAND IDENTITY
+═══════════════════════════════════════════════════════════════════════════════
+Colors:
+- Background: ${bg}
+- Primary: ${primary}
+- Secondary: ${secondary}
+- Accent: ${accent}
+- Text: ${text}
 
-REQUIRED SECTIONS:
-1. Left sidebar (240px) — logo, nav links relevant to this product, user avatar, sign out
-2. Main content area:
-   - Welcome header with user's name
-   - 3 stat cards relevant to this product (not generic "Users/Revenue/Active")
+Fonts:
+- Display: "${displayFont}" (for headings, stats)
+- Body: "${bodyFont}" (for UI text)
+
+Import from next/font/google and apply via className.
+
+═══════════════════════════════════════════════════════════════════════════════
+LAYOUT REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════════════
+1. LEFT SIDEBAR (w-64, fixed)
+   - Logo + "${brain.startup_name}" at top
+   - Navigation links relevant to ${brain.idea.slice(0, 60)}
+   - User avatar + email at bottom
+   - Sign out button
+   - Background: slightly lighter than main bg
+
+2. MAIN CONTENT AREA (ml-64)
+   - Welcome header: "Welcome back, [User Name]"
+   - 3-4 stat cards relevant to this product (NOT generic "Users/Revenue")
+     Examples for ${brain.idea.slice(0, 80)}: active projects, completion rate, etc.
    - Recent activity feed
-   - Quick action buttons
-3. Framer Motion stagger animation on mount
+   - Quick action buttons (${primary} color)
 
-USE:
-- createClient() from "@/lib/supabase"
-- supabase.auth.getUser() to get current user
-- Redirect to /auth if not logged in
-- Lucide React icons
-- Fully responsive (mobile: sidebar becomes bottom nav)
+3. MOBILE RESPONSIVE
+   - Sidebar becomes slide-out drawer
+   - Bottom navigation bar on mobile
+
+═══════════════════════════════════════════════════════════════════════════════
+AUTHENTICATION & DATA
+═══════════════════════════════════════════════════════════════════════════════
+Import: import { createClient } from "@/lib/supabase";
+
+On mount:
+const supabase = createClient();
+const { data: { user } } = await supabase.auth.getUser();
+if (!user) router.push("/auth");
+
+Display user.email and user.user_metadata.full_name
+
+Sign out:
+await supabase.auth.signOut();
+router.push("/auth");
+
+═══════════════════════════════════════════════════════════════════════════════
+FRAMER MOTION ANIMATIONS
+═══════════════════════════════════════════════════════════════════════════════
+import { motion } from "framer-motion";
+
+Stagger stat cards on mount:
+<motion.div
+  variants={{
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  }}
+  initial="hidden"
+  animate="visible"
+>
+  {stats.map(stat => (
+    <motion.div
+      key={stat.id}
+      variants={{
+        hidden: { opacity: 0, y: 20 },
+        visible: { opacity: 1, y: 0 }
+      }}
+    >
+      {/* Stat card */}
+    </motion.div>
+  ))}
+</motion.div>
+
+Use Lucide React icons throughout.
 
 Return ONLY the complete TypeScript React component code starting with "use client";`;
 

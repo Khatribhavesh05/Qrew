@@ -13,14 +13,75 @@ export interface MCQ {
   field: string; // which company_brain field this answer maps to
 }
 
+// Fallback MCQs based on startup idea
+function generateFallbackMCQs(startup: Startup): MCQ[] {
+  const mcqs: MCQ[] = [];
+  
+  // Only generate MCQs if fields are truly missing
+  if (!startup.audience && !startup.customer_type) {
+    mcqs.push({
+      id: "fallback_1",
+      agent: "alex",
+      question: "Who is your primary target audience?",
+      choices: [
+        "Consumers (B2C)",
+        "Small businesses",
+        "Enterprise companies",
+        "Other businesses (B2B)"
+      ],
+      field: "customer_type"
+    });
+  }
+  
+  if (!startup.revenue_model) {
+    mcqs.push({
+      id: "fallback_2",
+      agent: "sam",
+      question: "How will you generate revenue?",
+      choices: [
+        "Subscription (monthly/yearly)",
+        "One-time purchase",
+        "Freemium model",
+        "Marketplace commission"
+      ],
+      field: "revenue_model"
+    });
+  }
+  
+  if (!startup.brand_vibe && mcqs.length < 3) {
+    mcqs.push({
+      id: "fallback_3",
+      agent: "jordan",
+      question: "What vibe should your brand have?",
+      choices: [
+        "Professional & trustworthy",
+        "Fun & playful",
+        "Modern & minimalist",
+        "Bold & energetic"
+      ],
+      field: "brand_vibe"
+    });
+  }
+  
+  // Return max 3 MCQs
+  return mcqs.slice(0, 3);
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ startupId: string }> }
 ) {
+  const startTime = Date.now();
   const { startupId } = await params;
+  
+  console.log(`[MCQ] Starting request for startup ${startupId}`);
+  
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) {
+    console.error("[MCQ] Unauthorized request");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { data: startupRow } = await supabase
     .from("startups")
@@ -29,8 +90,13 @@ export async function GET(
     .eq("user_id", user.id)
     .single();
 
-  if (!startupRow) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!startupRow) {
+    console.error(`[MCQ] Startup ${startupId} not found`);
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  
   const startup = startupRow as Startup;
+  console.log(`[MCQ] Loaded startup: "${startup.idea}"`);
 
   const model = genai.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
@@ -73,16 +139,55 @@ agent: one of "alex" | "sam" | "jordan"
 Most responses should be: []`;
 
   try {
-    const result = await model.generateContent(prompt);
+    console.log("[MCQ] Calling Gemini API...");
+    
+    // Create a timeout promise (15 seconds)
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Gemini API timeout after 15s")), 15000);
+    });
+    
+    // Race between API call and timeout
+    const result = await Promise.race([
+      model.generateContent(prompt),
+      timeoutPromise
+    ]);
+    
+    const elapsed = Date.now() - startTime;
+    console.log(`[MCQ] Gemini responded in ${elapsed}ms`);
+    
     const raw = result.response.text().trim();
+    console.log(`[MCQ] Raw response: ${raw.substring(0, 200)}...`);
+    
     const cleaned = raw.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
     const match = cleaned.match(/\[[\s\S]*\]/);
-    if (!match) return NextResponse.json({ mcqs: [] });
+    
+    if (!match) {
+      console.log("[MCQ] No JSON array found in response, returning empty array");
+      return NextResponse.json({ mcqs: [] });
+    }
+    
     const mcqs = JSON.parse(match[0]) as MCQ[];
+    console.log(`[MCQ] Successfully parsed ${mcqs.length} questions`);
+    
     return NextResponse.json({ mcqs });
   } catch (err) {
+    const elapsed = Date.now() - startTime;
     const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: msg, mcqs: [] }, { status: 500 });
+    
+    console.error(`[MCQ] Error after ${elapsed}ms:`, msg);
+    console.error("[MCQ] Full error:", err);
+    
+    // Generate fallback MCQs
+    console.log("[MCQ] Generating fallback MCQs...");
+    const fallbackMCQs = generateFallbackMCQs(startup);
+    console.log(`[MCQ] Generated ${fallbackMCQs.length} fallback questions`);
+    
+    // Return fallback MCQs with 200 status (not an error from client perspective)
+    return NextResponse.json({
+      mcqs: fallbackMCQs,
+      fallback: true,
+      error: msg
+    });
   }
 }
 

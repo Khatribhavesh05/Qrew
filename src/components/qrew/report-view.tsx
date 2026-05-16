@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, CheckCircle, FileText, Zap, BarChart3, ArrowRight, Info, MessageSquare } from "lucide-react";
+import { Loader2, CheckCircle, FileText, Zap, BarChart3, ArrowRight, Info, MessageSquare, Download, Rocket } from "lucide-react";
 import { MCQPopup } from "./mcq-popup";
 import { ReportPanel } from "./report-panel";
 import { AgentChatPanel } from "./agent-chat-panel";
@@ -110,9 +110,6 @@ export function ReportView({ startup }: ReportViewProps) {
     if (mcqsLoadedRef.current) return;
     mcqsLoadedRef.current = true;
 
-    // ── Primary guard: report_data in DB trumps everything ──────────────────
-    // Check report_data FIRST regardless of status — avoids re-generation
-    // when status is stale (e.g. stuck at "researching" but data exists)
     const rd = startup.report_data as Partial<Reports> | null;
     if (rd?.research && rd?.strategy) {
       console.log("[ReportView] Loading reports from DB — skipping generation");
@@ -122,26 +119,20 @@ export function ReportView({ startup }: ReportViewProps) {
       return;
     }
 
-    // Status check: if report_ready/live but report_data is somehow missing,
-    // still skip generation and show empty state rather than burn credits
     if (startup.status === "report_ready" || startup.status === "live") {
       console.warn("[ReportView] Status is done but report_data is empty — skipping generation");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAgentStatus({ alex: "done", sam: "done" });
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPhase("done");
       return;
     }
 
-    // Only reach here if report_data is null AND status is still in-progress
     console.log("[ReportView] No existing reports — loading MCQs then generating");
 
-    // Safety timeout: if MCQ fetch takes > 8s, skip to generation
     const mcqTimeout = setTimeout(() => {
-      console.warn("[MCQ] Timeout — skipping to generation");
+      console.warn("[MCQ] Timeout after 3s — skipping to generation");
       setPhase("generating");
       startGeneration();
-    }, 8000);
+    }, 3000);
 
     void (async () => {
       try {
@@ -157,14 +148,11 @@ export function ReportView({ startup }: ReportViewProps) {
           return;
         }
 
-        const data = (await res.json()) as { mcqs?: MCQ[]; error?: string };
+        const data = (await res.json()) as { mcqs?: MCQ[]; error?: string; fallback?: boolean };
         console.log("[MCQ] Response:", data);
 
-        if (data.error) {
-          console.warn("[MCQ] API returned error:", data.error, "— skipping");
-          setPhase("generating");
-          startGeneration();
-          return;
+        if (data.fallback) {
+          console.log("[MCQ] Using fallback questions (Gemini failed)");
         }
 
         const loaded = data.mcqs ?? [];
@@ -174,7 +162,6 @@ export function ReportView({ startup }: ReportViewProps) {
           setMcqs(loaded);
           setPhase("mcqs");
         } else {
-          // Clear idea — skip MCQs, go straight to generation
           console.log("[MCQ] Idea is clear — no questions needed, starting generation");
           setPhase("generating");
           startGeneration();
@@ -188,14 +175,12 @@ export function ReportView({ startup }: ReportViewProps) {
     })();
 
     return () => { eventSourceRef.current?.close(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally empty — run once on mount only
+  }, [startup.id, startup.report_data, startup.status]);
 
 
   // ── MCQ handlers ────────────────────────────────────────────────────────────
   const handleMCQAnswered = (field: string, value: string) => {
     setAnsweredCount((c) => c + 1);
-    // Save answer in background
     void fetch(`/api/startups/${startup.id}/mcqs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -209,7 +194,6 @@ export function ReportView({ startup }: ReportViewProps) {
   const advanceMCQ = () => {
     const nextIndex = mcqIndex + 1;
     setMcqIndex(nextIndex);
-    // All MCQs done — start generation
     if (nextIndex >= mcqs.length) {
       startGeneration();
     }
@@ -231,37 +215,46 @@ export function ReportView({ startup }: ReportViewProps) {
       className="min-h-screen flex flex-col"
       style={{ background: "#0A0A0A", color: "#F5F5F5" }}
     >
-      {/* Ambient */}
-      <div
-        className="pointer-events-none fixed inset-0"
-        style={{ background: "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(99,102,241,0.07), transparent 60%)" }}
-      />
+      {/* Animated background */}
+      <div className="pointer-events-none fixed inset-0">
+        <motion.div
+          animate={{
+            background: [
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(99,102,241,0.08), transparent 60%)",
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(139,92,246,0.06), transparent 60%)",
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(99,102,241,0.08), transparent 60%)",
+            ],
+          }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute inset-0"
+        />
+      </div>
 
       {/* Nav */}
-      <nav className="relative z-10 flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "#1F1F1F" }}>
+      <nav className="relative z-10 flex items-center justify-between px-6 py-4 border-b backdrop-blur-md" style={{ borderColor: "rgba(255,255,255,0.05)", background: "rgba(10,10,10,0.8)" }}>
         <span className="text-lg font-bold" style={{ color: "#6366F1", letterSpacing: "-0.04em" }}>qrew</span>
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium" style={{ color: "#F5F5F5" }}>{startup.name}</span>
-          <Link href="/app" className="text-xs" style={{ color: "#525252" }}>Dashboard →</Link>
+        <div className="flex items-center gap-4">
+          <span className="text-sm font-semibold" style={{ color: "#F5F5F5" }}>{startup.name}</span>
+          <Link href="/app" className="text-xs font-medium transition-colors" style={{ color: "#6B7280" }} onMouseEnter={e => e.currentTarget.style.color = "#9CA3AF"} onMouseLeave={e => e.currentTarget.style.color = "#6B7280"}>Dashboard →</Link>
         </div>
       </nav>
 
-      <div className="relative z-10 w-full max-w-2xl mx-auto px-4 py-10 flex flex-col gap-6">
+      <div className="relative z-10 w-full max-w-3xl mx-auto px-4 py-12 flex flex-col gap-8">
 
         {/* Step indicator */}
         <div className="flex items-center gap-3">
           <StepBadge n={1} label="Research" done={agentStatus.alex === "done"} active={agentStatus.alex === "thinking"} />
-          <div className="h-px flex-1" style={{ background: "#1F1F1F" }} />
+          <div className="h-px flex-1" style={{ background: "linear-gradient(to right, rgba(99,102,241,0.3), rgba(255,255,255,0.05))" }} />
           <StepBadge n={2} label="Strategy" done={agentStatus.sam === "done"} active={agentStatus.sam === "thinking"} />
-          <div className="h-px flex-1" style={{ background: "#1F1F1F" }} />
+          <div className="h-px flex-1" style={{ background: "linear-gradient(to right, rgba(255,255,255,0.05), rgba(255,255,255,0.02))" }} />
           <StepBadge n={3} label="Build" done={false} active={false} />
         </div>
 
         {/* ── Phase: Loading MCQs ── */}
         {phase === "loading_mcqs" && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3 py-4">
-            <Loader2 size={16} className="animate-spin" style={{ color: "#6366F1" }} />
-            <span className="text-sm" style={{ color: "#A3A3A3" }}>Preparing your questions…</span>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3 py-6 justify-center">
+            <Loader2 size={18} className="animate-spin" style={{ color: "#6366F1" }} />
+            <span className="text-sm font-medium" style={{ color: "#9CA3AF" }}>Preparing your questions…</span>
           </motion.div>
         )}
 
@@ -270,16 +263,21 @@ export function ReportView({ startup }: ReportViewProps) {
           {currentMCQ && (
             <motion.div key={`mcq-wrapper-${mcqIndex}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               {/* Progress */}
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs" style={{ color: "#525252" }}>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-xs font-semibold" style={{ color: "#6B7280" }}>
                   Question {mcqIndex + 1} of {mcqs.length}
                 </span>
-                <div className="flex gap-1">
+                <div className="flex gap-1.5">
                   {mcqs.map((_, i) => (
-                    <div
+                    <motion.div
                       key={i}
-                      className="h-1 w-6 rounded-full transition-all"
-                      style={{ background: i < mcqIndex ? "#6366F1" : i === mcqIndex ? "#6366F1" : "#1F1F1F", opacity: i < mcqIndex ? 0.4 : 1 }}
+                      initial={{ scale: 0.8 }}
+                      animate={{ scale: i === mcqIndex ? 1 : 0.8 }}
+                      className="h-1.5 rounded-full transition-all"
+                      style={{
+                        width: i === mcqIndex ? 32 : 24,
+                        background: i < mcqIndex ? "#10B981" : i === mcqIndex ? "#6366F1" : "rgba(255,255,255,0.1)",
+                      }}
                     />
                   ))}
                 </div>
@@ -295,14 +293,14 @@ export function ReportView({ startup }: ReportViewProps) {
         </AnimatePresence>
 
         {answeredCount > 0 && phase !== "mcqs" && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-center" style={{ color: "#525252" }}>
-            {answeredCount} answer{answeredCount > 1 ? "s" : ""} saved — your team is using this
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-center font-medium" style={{ color: "#6B7280" }}>
+            ✓ {answeredCount} answer{answeredCount > 1 ? "s" : ""} saved — your team is using this
           </motion.p>
         )}
 
         {/* ── Phase: Generating — agent status cards ── */}
         {(isGenerating || isDone) && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-3">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-4">
             <AgentCard
               emoji="🔍" name="Alex" role="Research"
               state={agentStatus.alex} color="#6366F1"
@@ -321,7 +319,7 @@ export function ReportView({ startup }: ReportViewProps) {
           {reports.research && (
             <ArtifactCard
               key="research"
-              icon={<Zap size={16} color="#6366F1" />}
+              icon={<Zap size={18} color="#6366F1" />}
               label="Research Report"
               subtitle="Market analysis · Competitors · Audience"
               color="#6366F1"
@@ -331,7 +329,7 @@ export function ReportView({ startup }: ReportViewProps) {
           {reports.strategy && (
             <ArtifactCard
               key="strategy"
-              icon={<BarChart3 size={16} color="#10B981" />}
+              icon={<BarChart3 size={18} color="#10B981" />}
               label="Strategy Report"
               subtitle="GTM · Pricing · 90-day roadmap"
               color="#10B981"
@@ -341,28 +339,33 @@ export function ReportView({ startup }: ReportViewProps) {
         </AnimatePresence>
 
         {error && (
-          <div className="rounded-xl border px-4 py-3 text-sm text-center" style={{ borderColor: "#EF4444", color: "#EF4444", background: "rgba(239,68,68,0.06)" }}>
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-xl border px-4 py-3 text-sm text-center font-medium"
+            style={{ borderColor: "rgba(239,68,68,0.3)", color: "#EF4444", background: "rgba(239,68,68,0.06)" }}
+          >
             {error}
-          </div>
+          </motion.div>
         )}
 
         {/* Build CTA — appears once first report arrives */}
         <AnimatePresence>
           {(reports.research || isDone) && (
             <motion.div
-              initial={{ opacity: 0, y: 16 }}
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-2 rounded-2xl border p-5"
-              style={{ background: "#111111", borderColor: "#1F1F1F" }}
+              className="mt-4 rounded-2xl border p-6 backdrop-blur-sm"
+              style={{ background: "rgba(17,17,17,0.6)", borderColor: "rgba(255,255,255,0.05)" }}
             >
-              <div className="flex items-center gap-2 mb-4">
-                <FileText size={14} style={{ color: "#525252" }} />
-                <span className="text-xs font-medium" style={{ color: "#525252" }}>Step 2 — Build your startup</span>
+              <div className="flex items-center gap-2 mb-5">
+                <FileText size={16} style={{ color: "#6B7280" }} />
+                <span className="text-sm font-bold" style={{ color: "#9CA3AF" }}>Step 2 — Build your startup</span>
               </div>
-              <p className="text-sm mb-5" style={{ color: "#A3A3A3" }}>
+              <p className="text-sm mb-6 leading-relaxed" style={{ color: "#9CA3AF" }}>
                 Generate your full codebase. Preview live. Deploy when ready.
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <BuildCard
                   label="Standard"
                   credits="~1.5 credits"
@@ -390,7 +393,7 @@ export function ReportView({ startup }: ReportViewProps) {
                 />
               </div>
               {!isDone && (
-                <p className="text-xs text-center mt-3" style={{ color: "#525252" }}>Waiting for all reports…</p>
+                <p className="text-xs text-center mt-4 font-medium" style={{ color: "#6B7280" }}>Waiting for all reports…</p>
               )}
             </motion.div>
           )}
@@ -425,13 +428,18 @@ export function ReportView({ startup }: ReportViewProps) {
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function StepBadge({ n, label, done, active }: { n: number; label: string; done: boolean; active: boolean }) {
-  const color = done ? "#10B981" : active ? "#6366F1" : "#525252";
+  const color = done ? "#10B981" : active ? "#6366F1" : "#6B7280";
   return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: `${color}20`, color }}>
-        {done ? <CheckCircle size={12} /> : n}
-      </div>
-      <span className="text-xs font-medium hidden sm:block" style={{ color }}>{label}</span>
+    <div className="flex items-center gap-2 shrink-0">
+      <motion.div
+        animate={active ? { scale: [1, 1.1, 1] } : {}}
+        transition={{ duration: 2, repeat: Infinity }}
+        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
+        style={{ background: `${color}20`, color, border: `2px solid ${color}40` }}
+      >
+        {done ? <CheckCircle size={14} strokeWidth={3} /> : n}
+      </motion.div>
+      <span className="text-xs font-bold hidden sm:block" style={{ color }}>{label}</span>
     </div>
   );
 }
@@ -443,59 +451,85 @@ function AgentCard({ emoji, name, role, state, color, subtitle, onClick }: {
   const isDone = state === "done";
   return (
     <motion.div
-      animate={{ borderColor: isDone ? `${color}30` : "#1F1F1F" }}
-      className="flex items-center gap-4 rounded-xl border px-4 py-3"
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      animate={{
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        borderColor: isDone ? `${color}40` : "rgba(255,255,255,0.05)",
+      }}
+      whileHover={isDone && onClick ? { y: -2, scale: 1.01 } : {}}
+      className="relative flex items-center gap-4 rounded-2xl border px-5 py-4 backdrop-blur-sm overflow-hidden"
       style={{
-        background: isDone ? `${color}08` : "#111111",
-        borderColor: "#1F1F1F",
+        background: isDone ? `${color}08` : "rgba(17,17,17,0.6)",
         cursor: isDone && onClick ? "pointer" : "default",
       }}
       onClick={isDone ? onClick : undefined}
-      whileHover={isDone && onClick ? { scale: 1.012 } : {}}
-      whileTap={isDone && onClick ? { scale: 0.99 } : {}}
     >
-      <div
-        className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 relative"
-        style={{ background: isDone ? `${color}18` : "#161616", border: `1px solid ${isDone ? `${color}30` : "#1A1A1A"}` }}
-      >
-        {emoji}
-        {isThinking && (
-          <motion.div
-            className="absolute inset-0 rounded-xl border-2"
-            style={{ borderColor: color }}
-            animate={{ scale: [1, 1.25], opacity: [0.8, 0] }}
-            transition={{ duration: 1, repeat: Infinity }}
-          />
-        )}
+      {/* Glow effect */}
+      {isDone && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: `radial-gradient(circle at 20% 50%, ${color}10, transparent 70%)` }}
+        />
+      )}
+
+      <div className="relative z-10">
+        <motion.div
+          animate={isThinking ? { scale: [1, 1.05, 1] } : {}}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="relative w-14 h-14 rounded-xl flex items-center justify-center text-2xl shrink-0"
+          style={{ background: isDone ? `${color}20` : "rgba(255,255,255,0.03)", border: `2px solid ${isDone ? `${color}50` : "rgba(255,255,255,0.05)"}` }}
+        >
+          {emoji}
+          {isThinking && (
+            <>
+              <motion.div
+                className="absolute inset-0 rounded-xl border-2"
+                style={{ borderColor: color }}
+                animate={{ scale: [1, 1.3], opacity: [0.8, 0] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              />
+              <motion.div
+                className="absolute inset-0 rounded-xl border-2"
+                style={{ borderColor: color }}
+                animate={{ scale: [1, 1.3], opacity: [0.8, 0] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: 0.75 }}
+              />
+            </>
+          )}
+        </motion.div>
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold" style={{ color: "#F5F5F5" }}>{name}</span>
-          <span className="text-xs rounded-full px-2 py-0.5 capitalize" style={{ background: `${color}15`, color }}>{role}</span>
+
+      <div className="flex-1 min-w-0 relative z-10">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-base font-bold" style={{ color: "#F5F5F5" }}>{name}</span>
+          <span className="text-xs rounded-full px-2.5 py-1 font-semibold capitalize" style={{ background: `${color}15`, color, border: `1px solid ${color}30` }}>{role}</span>
         </div>
-        <p className="text-xs mt-0.5" style={{ color: "#525252" }}>
+        <p className="text-sm" style={{ color: "#9CA3AF" }}>
           {subtitle ?? (isDone ? "Report ready" : isThinking ? "Working…" : "Waiting…")}
         </p>
       </div>
-      <div className="shrink-0 flex items-center gap-2">
+
+      <div className="shrink-0 flex items-center gap-3 relative z-10">
         {isDone && onClick && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.3 }}
-            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium"
-            style={{ background: `${color}15`, color }}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold"
+            style={{ background: `${color}15`, color, border: `1px solid ${color}30` }}
           >
-            <MessageSquare size={11} />
+            <MessageSquare size={12} />
             Chat
           </motion.div>
         )}
         {isDone && (
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 400 }}>
-            <CheckCircle size={16} style={{ color }} />
+          <motion.div initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 400 }}>
+            <CheckCircle size={20} style={{ color }} strokeWidth={2.5} />
           </motion.div>
         )}
-        {isThinking && <Loader2 size={16} className="animate-spin" style={{ color }} />}
+        {isThinking && <Loader2 size={18} className="animate-spin" style={{ color }} />}
       </div>
     </motion.div>
   );
@@ -506,24 +540,30 @@ function ArtifactCard({ icon, label, subtitle, color, onClick }: {
 }) {
   return (
     <motion.button
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ scale: 1.015 }}
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      whileHover={{ y: -4, scale: 1.01 }}
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
-      className="w-full flex items-center gap-4 rounded-xl border p-4 text-left group transition-colors"
-      style={{ background: "#111111", borderColor: "#1F1F1F" }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = `${color}40`; }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#1F1F1F"; }}
+      className="w-full flex items-center gap-4 rounded-2xl border p-5 text-left group transition-all backdrop-blur-sm"
+      style={{ background: "rgba(17,17,17,0.6)", borderColor: "rgba(255,255,255,0.05)" }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.borderColor = `${color}40`;
+        (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 8px 32px ${color}15`;
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.05)";
+        (e.currentTarget as HTMLButtonElement).style.boxShadow = "none";
+      }}
     >
-      <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${color}15` }}>
+      <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${color}15`, border: `1px solid ${color}30` }}>
         {icon}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold" style={{ color: "#F5F5F5" }}>📄 {label}</p>
-        <p className="text-xs mt-0.5" style={{ color: "#525252" }}>{subtitle}</p>
+        <p className="text-base font-bold mb-1" style={{ color: "#F5F5F5" }}>📄 {label}</p>
+        <p className="text-xs" style={{ color: "#9CA3AF" }}>{subtitle}</p>
       </div>
-      <ArrowRight size={14} className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color }} />
+      <ArrowRight size={18} className="shrink-0 opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-1" style={{ color }} />
     </motion.button>
   );
 }
@@ -547,42 +587,40 @@ function BuildCard({
   };
 
   return (
-    <div
-      className="flex flex-col rounded-xl border p-4 transition-all"
+    <motion.div
+      whileHover={!isDisabled ? { y: -2, scale: 1.01 } : {}}
+      className="flex flex-col rounded-2xl border p-5 transition-all backdrop-blur-sm"
       style={{
-        borderColor: comingSoon ? "#1F1F1F" : `${color}25`,
-        background: comingSoon ? "#0D0D0D" : `${color}06`,
-        opacity: comingSoon ? 0.7 : 1,
+        borderColor: comingSoon ? "rgba(255,255,255,0.05)" : `${color}30`,
+        background: comingSoon ? "rgba(17,17,17,0.4)" : `${color}06`,
+        opacity: comingSoon ? 0.6 : 1,
       }}
     >
       {/* Header */}
-      <div className="flex items-start justify-between mb-1">
+      <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold" style={{ color: comingSoon ? "#525252" : "#F5F5F5" }}>{label}</span>
+          <span className="text-base font-bold" style={{ color: comingSoon ? "#6B7280" : "#F5F5F5" }}>{label}</span>
           {comingSoon && (
-            <span className="text-xs rounded-full px-2 py-0.5 font-medium" style={{ background: "#1A1A1A", color: "#444444", border: "1px solid #252525" }}>
-              Coming Soon
+            <span className="text-xs rounded-full px-2 py-0.5 font-bold" style={{ background: "rgba(255,255,255,0.05)", color: "#6B7280" }}>
+              Soon
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <span
-            className="text-xs rounded-full px-2 py-0.5 font-medium"
-            style={{ background: comingSoon ? "#1A1A1A" : `${color}18`, color: comingSoon ? "#525252" : color }}
+            className="text-xs rounded-full px-2.5 py-1 font-bold"
+            style={{ background: comingSoon ? "rgba(255,255,255,0.03)" : `${color}18`, color: comingSoon ? "#6B7280" : color }}
           >
             {credits}
           </span>
-          {/* ⓘ tooltip trigger */}
           <div className="relative">
             <button
               onMouseEnter={() => setShowTooltip(true)}
               onMouseLeave={() => setShowTooltip(false)}
               className="flex items-center justify-center rounded-full transition-colors"
-              style={{ color: "#525252" }}
-              onFocus={() => setShowTooltip(true)}
-              onBlur={() => setShowTooltip(false)}
+              style={{ color: "#6B7280" }}
             >
-              <Info size={13} />
+              <Info size={14} />
             </button>
             <AnimatePresence>
               {showTooltip && (
@@ -591,18 +629,17 @@ function BuildCard({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 4, scale: 0.95 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 bottom-full mb-2 z-50 rounded-xl border p-3 w-52 text-left"
-                  style={{ background: "#161616", borderColor: `${color}30`, boxShadow: `0 8px 32px rgba(0,0,0,0.6)` }}
+                  className="absolute right-0 bottom-full mb-2 z-50 rounded-xl border p-3 w-56 text-left backdrop-blur-md"
+                  style={{ background: "rgba(22,22,22,0.95)", borderColor: `${color}30`, boxShadow: `0 8px 32px rgba(0,0,0,0.6)` }}
                 >
                   {tooltip.split("\n").map((line, i) => (
-                    <p key={i} className="text-xs leading-relaxed" style={{ color: line.startsWith("Everything") ? "#A3A3A3" : "#F5F5F5" }}>
+                    <p key={i} className="text-xs leading-relaxed mb-1" style={{ color: line.startsWith("Everything") ? "#9CA3AF" : "#F5F5F5" }}>
                       {line}
                     </p>
                   ))}
-                  {/* Arrow */}
                   <div
-                    className="absolute right-1.5 top-full w-2 h-2 rotate-45"
-                    style={{ background: "#161616", borderRight: `1px solid ${color}30`, borderBottom: `1px solid ${color}30`, marginTop: "-5px" }}
+                    className="absolute right-2 top-full w-2 h-2 rotate-45"
+                    style={{ background: "rgba(22,22,22,0.95)", borderRight: `1px solid ${color}30`, borderBottom: `1px solid ${color}30`, marginTop: "-5px" }}
                   />
                 </motion.div>
               )}
@@ -611,33 +648,33 @@ function BuildCard({
         </div>
       </div>
 
-      {/* Description */}
-      <p className="text-xs leading-relaxed mb-4 flex-1" style={{ color: "#525252" }}>{desc}</p>
+      <p className="text-sm leading-relaxed mb-5 flex-1" style={{ color: "#9CA3AF" }}>{desc}</p>
 
-      {/* CTA button */}
       {insufficientCredits ? (
         <a
           href="/app?buy=true"
-          className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition-all"
-          style={{ background: "rgba(239,68,68,0.08)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.2)" }}
+          className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-all"
+          style={{ background: "rgba(239,68,68,0.1)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.3)" }}
         >
           Insufficient credits — Buy more
         </a>
       ) : (
         <motion.button
           whileHover={!isDisabled ? { scale: 1.02 } : {}}
-          whileTap={!isDisabled ? { scale: 0.97 } : {}}
+          whileTap={!isDisabled ? { scale: 0.98 } : {}}
           onClick={comingSoon ? undefined : handleClick}
           disabled={isDisabled}
-          className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition-all"
+          className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-all"
           style={comingSoon
-            ? { background: "#111111", color: "#444444", border: "1px solid #1A1A1A", cursor: "not-allowed", pointerEvents: "none" }
-            : { background: color, color: "#fff", boxShadow: isDisabled ? "none" : `0 0 16px ${color}40`, opacity: isDisabled ? 0.4 : 1 }
+            ? { background: "rgba(255,255,255,0.03)", color: "#6B7280", border: "1px solid rgba(255,255,255,0.05)", cursor: "not-allowed" }
+            : { background: color, color: "#fff", boxShadow: isDisabled ? "none" : `0 0 20px ${color}40`, opacity: isDisabled ? 0.5 : 1 }
           }
         >
-          {comingSoon ? "Coming Soon" : <>Start {label} Build <ArrowRight size={12} /></>}
+          {comingSoon ? "Coming Soon" : <><Rocket size={14} /> Start {label} Build</>}
         </motion.button>
       )}
-    </div>
+    </motion.div>
   );
 }
+
+// Made with Bob

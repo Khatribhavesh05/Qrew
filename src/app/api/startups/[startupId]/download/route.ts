@@ -95,9 +95,8 @@ function makePackageJson(name: string): string {
 }
 
 function makeNextConfig(): string {
-  return `import type { NextConfig } from 'next';
-
-const nextConfig: NextConfig = {
+  return `/** @type {import('next').NextConfig} */
+const nextConfig = {
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'fal.media' },
@@ -618,8 +617,11 @@ function buildCompleteProject(
 
   // Config files
   if (!has("package.json")) result["package.json"] = makePackageJson(startupName);
-  if (!has("next.config.ts")) result["next.config.ts"] = makeNextConfig();
+  if (!has("next.config.mjs")) result["next.config.mjs"] = makeNextConfig();
   if (!has("tailwind.config.ts")) result["tailwind.config.ts"] = makeTailwindConfig(colors, fonts);
+  
+  // Remove old .ts config if it exists (Next.js 14.2.5 doesn't support it)
+  delete result["next.config.ts"];
   if (!has("tsconfig.json")) result["tsconfig.json"] = makeTsConfig();
   if (!has("postcss.config.mjs")) result["postcss.config.mjs"] = makePostcss();
   if (!has(".env.example")) result[".env.example"] = makeEnvExample();
