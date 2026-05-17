@@ -196,18 +196,6 @@ Key sessions include:
 
 ---
 
-## Roadmap
-
-**Coming soon**
-- MCQ clarifying questions flow
-- Brand color fix per industry
-- Premium build with cinematic scroll
-- Full agent chat with context awareness
-- Payments activation
-- Product Hunt launch
-- Team plan + public gallery of built startups
-
----
 
 ## Built By
 
