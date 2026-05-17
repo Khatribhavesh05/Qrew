@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { Sparkles } from "lucide-react";
@@ -28,8 +28,29 @@ function GoogleIcon() {
   );
 }
 
+interface Particle {
+  id: number;
+  left: string;
+  top: string;
+  duration: number;
+  delay: number;
+}
+
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const [particles, setParticles] = useState<Particle[]>([]);
+
+  useEffect(() => {
+    // Generate particles only on client side to avoid hydration mismatch
+    const generatedParticles: Particle[] = Array.from({ length: 20 }, (_, i) => ({
+      id: i,
+      left: `${Math.random() * 100}%`,
+      top: `${Math.random() * 100}%`,
+      duration: 3 + Math.random() * 2,
+      delay: Math.random() * 5,
+    }));
+    setParticles(generatedParticles);
+  }, []);
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
@@ -112,22 +133,22 @@ export default function LoginPage() {
       </div>
 
       {/* Floating particles */}
-      {[...Array(20)].map((_, i) => (
+      {particles.map((particle) => (
         <motion.div
-          key={i}
+          key={particle.id}
           className="absolute h-1 w-1 rounded-full bg-white"
           style={{
-            left: `${Math.random() * 100}%`,
-            top: `${Math.random() * 100}%`,
+            left: particle.left,
+            top: particle.top,
           }}
           animate={{
             y: [0, -30, 0],
             opacity: [0, 0.5, 0],
           }}
           transition={{
-            duration: 3 + Math.random() * 2,
+            duration: particle.duration,
             repeat: Infinity,
-            delay: Math.random() * 5,
+            delay: particle.delay,
             ease: "easeInOut",
           }}
         />

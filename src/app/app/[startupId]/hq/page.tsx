@@ -119,7 +119,7 @@ export default function HQPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push("/login"); return; }
 
-      const [{ data: s }, { data: credData }, { data: codeData }, { data: profileData }] = await Promise.all([
+      const [{ data: s }, { data: credData }, { data: profileData }] = await Promise.all([
         supabase
           .from("startups")
           .select("*")
@@ -128,11 +128,6 @@ export default function HQPage() {
           .single(),
         supabase
           .from("startup_credentials")
-          .select("*")
-          .eq("startup_id", startupId)
-          .maybeSingle(),
-        supabase
-          .from("code_maps")
           .select("*")
           .eq("startup_id", startupId)
           .maybeSingle(),
@@ -146,14 +141,22 @@ export default function HQPage() {
       if (!s) { router.push("/app"); return; }
       setStartup(s as Startup);
       setCredentials(credData as StartupCredentials | null);
-      setCodeMap(codeData as CodeMap | null);
       setUserProfile(profileData as { github_access_token?: string } | null);
       setGithubConnected(!!(s as Startup).github_url);
 
-      // Build file tree from code_map
-      if (codeData?.file_map) {
-        const tree = buildFileTree(codeData.file_map as Record<string, string>);
-        setFileTree(tree);
+      // Fetch complete file structure from API (includes all config files, lib files, etc.)
+      try {
+        const filesRes = await fetch(`/api/startups/${startupId}/files`);
+        if (filesRes.ok) {
+          const { files } = await filesRes.json() as { files: Record<string, string> };
+          setCodeMap({ file_map: files } as CodeMap);
+          const tree = buildFileTree(files);
+          setFileTree(tree);
+          // Expand src folder by default
+          setExpandedFolders(new Set(['src']));
+        }
+      } catch (err) {
+        console.error('Failed to fetch files:', err);
       }
 
       setLoading(false);
@@ -163,8 +166,9 @@ export default function HQPage() {
   // ── Build file tree from file_map ───────────────────────────────────────────
 
   const buildFileTree = (fileMap: Record<string, string>): FileNode[] => {
-    const root: Record<string, FileNode> = {};
+    const root: Record<string, any> = {};
 
+    // Build nested structure
     Object.entries(fileMap).forEach(([path, content]) => {
       const parts = path.split("/");
       let current = root;
@@ -185,32 +189,22 @@ export default function HQPage() {
               name: part,
               path: parts.slice(0, idx + 1).join("/"),
               type: "folder",
-              children: [],
+              children: {},
             };
           }
-          if (!current[part].children) {
-            current[part].children = [];
-          }
-          // Navigate deeper
-          const childrenObj: Record<string, FileNode> = {};
-          current[part].children!.forEach(child => {
-            childrenObj[child.name] = child;
-          });
-          current = childrenObj;
+          // Navigate to this folder's children
+          current = current[part].children;
         }
       });
     });
 
-    const convertToArray = (obj: Record<string, FileNode>): FileNode[] => {
-      return Object.values(obj).map(node => {
+    // Convert nested object structure to array structure
+    const convertToArray = (obj: Record<string, any>): FileNode[] => {
+      return Object.values(obj).map((node: any) => {
         if (node.type === "folder" && node.children) {
-          const childrenObj: Record<string, FileNode> = {};
-          node.children.forEach(child => {
-            childrenObj[child.name] = child;
-          });
-          node.children = convertToArray(childrenObj);
+          node.children = convertToArray(node.children);
         }
-        return node;
+        return node as FileNode;
       }).sort((a, b) => {
         if (a.type === b.type) return a.name.localeCompare(b.name);
         return a.type === "folder" ? -1 : 1;
@@ -545,7 +539,7 @@ export default function HQPage() {
             style={{ background: "rgba(99,102,241,0.12)", color: "#6366F1", border: "1px solid rgba(99,102,241,0.2)" }}
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(99,102,241,0.18)"; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(99,102,241,0.12)"; }}
-            onClick={() => window.alert("ZIP download coming soon.")}
+            onClick={() => void handleDownloadZip()}
           >
             <Download size={13} />
             Download ZIP
