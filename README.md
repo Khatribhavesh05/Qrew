@@ -209,3 +209,6 @@ B.Tech AI/ML, JIET Jodhpur
   <strong>Qrew — Your AI Founding Team</strong><br/>
   <em>From idea to deployed startup. In minutes.</em>
 </div>
+
+
+**Live Demo:** https://qrew-six.vercel.app
