@@ -28,7 +28,7 @@ begin
 end
 $$;
 
--- Fix the signup trigger to grant 2 free credits immediately.
+-- Fix the signup trigger to grant 10 free credits immediately.
 -- The original handle_new_user only inserted id + email, so credits_balance
 -- defaulted to 0. The OAuth callback's "if (!existing)" check was then
 -- skipped because the trigger had already created the row, leaving every
@@ -37,7 +37,7 @@ create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   insert into public.profiles (id, email, credits_balance)
-  values (new.id, new.email, 2)
+  values (new.id, new.email, 10)
   on conflict (id) do nothing;
   return new;
 end;

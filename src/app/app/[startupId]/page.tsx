@@ -76,14 +76,27 @@ export default function StartupPage() {
     void fetchData().then((s) => {
       if (!s) return;
 
+      // Built / deployed → go to Company HQ
+      if (s.status === "built" || isDeployed(s.status)) {
+        router.replace(`/app/${startupId}/hq`);
+        return;
+      }
+
       // Poll every 5s for statuses that change automatically on the server
       const shouldPoll = isDraft(s.status) || s.status === "building";
       if (!shouldPoll) return;
 
       pollRef.current = setInterval(async () => {
         const fresh = await fetchData();
+        if (!fresh) return;
+        // Redirect when build finishes
+        if (fresh.status === "built" || isDeployed(fresh.status)) {
+          if (pollRef.current) clearInterval(pollRef.current);
+          router.replace(`/app/${startupId}/hq`);
+          return;
+        }
         // Stop polling once status leaves the auto-changing group
-        if (fresh && !isDraft(fresh.status) && fresh.status !== "building") {
+        if (!isDraft(fresh.status) && fresh.status !== "building") {
           if (pollRef.current) clearInterval(pollRef.current);
         }
       }, 5000);
@@ -92,7 +105,7 @@ export default function StartupPage() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [fetchData]);
+  }, [fetchData, startupId, router]);
 
   // ── Loading ──────────────────────────────────────────────────────────────────
 
@@ -129,21 +142,13 @@ export default function StartupPage() {
     );
   }
 
-  // Code generated, waiting for manual deploy
-  if (startup.status === "built") {
+  // Built / deployed — redirect to HQ (handled in useEffect; show spinner while redirecting)
+  if (startup.status === "built" || isDeployed(startup.status)) {
     return (
-      <BuiltScreen
-        startup={startup}
-        onDeployed={(githubUrl, liveUrl) => {
-          setStartup(prev => prev ? { ...prev, status: "deployed", github_url: githubUrl, live_url: liveUrl } : prev);
-        }}
-      />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0A0A0A" }}>
+        <Loader2 size={24} className="animate-spin" style={{ color: "#6366F1" }} />
+      </div>
     );
-  }
-
-  // Deployed / live
-  if (isDeployed(startup.status)) {
-    return <DeployedScreen startup={startup} />;
   }
 
   // Error fallback
@@ -322,240 +327,6 @@ function BuildingScreen({
   );
 }
 
-// ── BuiltScreen ────────────────────────────────────────────────────────────────
-
-function BuiltScreen({
-  startup, onDeployed,
-}: {
-  startup: Startup;
-  onDeployed: (githubUrl: string, liveUrl: string) => void;
-}) {
-  const [deploying, setDeploying] = useState(false);
-  const [deployError, setDeployError] = useState<string | null>(null);
-  const [fileCount, setFileCount] = useState<number | null>(null);
-
-  // Get file count from code_maps
-  useEffect(() => {
-    void supabase
-      .from("code_maps")
-      .select("file_map")
-      .eq("startup_id", startup.id)
-      .single()
-      .then(({ data }) => {
-        if (data?.file_map) {
-          setFileCount(Object.keys(data.file_map as Record<string, unknown>).length);
-        }
-      });
-  }, [startup.id]);
-
-  const handleDeploy = async () => {
-    setDeploying(true);
-    setDeployError(null);
-    try {
-      const res = await fetch(`/api/startups/${startup.id}/deploy`, { method: "POST" });
-      const data = (await res.json()) as { githubUrl?: string; liveUrl?: string; error?: string };
-      if (!res.ok) {
-        setDeployError(data.error ?? "Deploy failed");
-        setDeploying(false);
-        return;
-      }
-      onDeployed(data.githubUrl ?? "", data.liveUrl ?? "");
-    } catch (err) {
-      setDeployError(err instanceof Error ? err.message : "Deploy failed");
-      setDeploying(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ background: "#0A0A0A", color: "#F5F5F5" }}>
-      <div className="pointer-events-none fixed inset-0">
-        <motion.div
-          animate={{
-            background: [
-              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(139,92,246,0.12), transparent 60%)",
-              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(168,85,247,0.10), transparent 60%)",
-              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(139,92,246,0.12), transparent 60%)",
-            ],
-          }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute inset-0"
-        />
-      </div>
-      <div className="relative z-10 w-full max-w-md">
-        <div className="text-center mb-6">
-          <span className="text-xl font-bold" style={{ color: "#6366F1", letterSpacing: "-0.04em" }}>qrew</span>
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border p-6 backdrop-blur-sm"
-          style={{ background: "rgba(17,17,17,0.8)", borderColor: "rgba(139,92,246,0.3)" }}
-        >
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-6">
-            <div
-              className="w-14 h-14 rounded-xl flex items-center justify-center text-2xl shrink-0"
-              style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)" }}
-            >
-              ✅
-            </div>
-            <div>
-              <p className="text-base font-bold" style={{ color: "#F5F5F5" }}>Code Generated</p>
-              <p className="text-sm mt-1" style={{ color: "#9CA3AF" }}>
-                {fileCount !== null ? `${fileCount} files ready` : "Loading files..."} · {startup.name}
-              </p>
-            </div>
-          </div>
-
-          <AnimatePresence>
-            {deployError && (
-              <motion.div
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-xl border px-3 py-2 mb-4 text-sm"
-                style={{ borderColor: "rgba(239,68,68,0.3)", color: "#EF4444", background: "rgba(239,68,68,0.06)" }}
-              >
-                {deployError}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Deploy button */}
-          <motion.button
-            whileHover={!deploying ? { scale: 1.02 } : {}}
-            whileTap={!deploying ? { scale: 0.98 } : {}}
-            onClick={() => void handleDeploy()}
-            disabled={deploying}
-            className="w-full flex items-center justify-center gap-2 rounded-xl py-4 text-sm font-bold mb-3 disabled:opacity-60"
-            style={{ background: "#8B5CF6", color: "#fff", boxShadow: deploying ? "none" : "0 0 30px rgba(139,92,246,0.5)" }}
-          >
-            {deploying ? <><Loader2 size={16} className="animate-spin" /> Deploying…</> : <><Rocket size={16} /> Push to GitHub & Deploy</>}
-          </motion.button>
-
-          {/* View build details */}
-          <a
-            href={`/app/${startup.id}/build?type=standard`}
-            className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-sm font-medium"
-            style={{ color: "#9CA3AF", border: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.02)" }}
-          >
-            <FileCode2 size={14} />
-            View generated code
-          </a>
-        </motion.div>
-
-        <div className="text-center mt-6">
-          <Link href="/app" className="text-sm font-medium" style={{ color: "#6B7280" }}>← Dashboard</Link>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── DeployedScreen (Company HQ) ────────────────────────────────────────────────
-
-function DeployedScreen({ startup }: { startup: Startup }) {
-  const primaryColor = "#10B981";
-
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 relative overflow-hidden" style={{ background: "#0A0A0A", color: "#F5F5F5" }}>
-      <div className="pointer-events-none fixed inset-0">
-        <motion.div
-          animate={{
-            background: [
-              `radial-gradient(ellipse 70% 50% at 50% 30%, ${primaryColor}12, transparent 60%)`,
-              `radial-gradient(ellipse 70% 50% at 50% 30%, ${primaryColor}10, transparent 60%)`,
-              `radial-gradient(ellipse 70% 50% at 50% 30%, ${primaryColor}12, transparent 60%)`,
-            ],
-          }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute inset-0"
-        />
-      </div>
-
-      <div className="relative z-10 w-full max-w-md">
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-8"
-        >
-          <span className="text-xl font-bold" style={{ color: "#6366F1", letterSpacing: "-0.04em" }}>qrew</span>
-        </motion.div>
-
-        {/* Success badge */}
-        <motion.div
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 300, damping: 20 }}
-          className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 text-4xl"
-          style={{ background: `${primaryColor}15`, border: `2px solid ${primaryColor}40`, boxShadow: `0 0 50px ${primaryColor}30` }}
-        >
-          🚀
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2" style={{ letterSpacing: "-0.03em" }}>
-            {startup.name ?? "Your startup"} is live
-          </h1>
-          <p className="text-base" style={{ color: "#9CA3AF" }}>
-            {startup.industry ?? "Your company"} · Deployed on Vercel
-          </p>
-        </motion.div>
-
-        {/* Links */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="flex flex-col gap-3"
-        >
-          {startup.live_url && (
-            <a
-              href={startup.live_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 rounded-xl border px-5 py-4 text-sm font-bold group"
-              style={{ background: primaryColor, borderColor: primaryColor, color: "#fff", boxShadow: `0 0 30px ${primaryColor}50` }}
-            >
-              <Globe size={18} />
-              <span className="flex-1 text-left truncate">{startup.live_url.replace("https://", "")}</span>
-              <ExternalLink size={14} className="opacity-80 group-hover:opacity-100" />
-            </a>
-          )}
-
-          {startup.github_url && (
-            <a
-              href={startup.github_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 rounded-xl border px-5 py-4 text-sm font-medium transition-all backdrop-blur-sm"
-              style={{ background: "rgba(17,17,17,0.6)", borderColor: "rgba(255,255,255,0.05)", color: "#F5F5F5" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.1)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.05)"; }}
-            >
-              <GitBranch size={18} style={{ color: "#9CA3AF" }} />
-              <span className="flex-1 text-left text-sm truncate" style={{ color: "#9CA3AF" }}>
-                {startup.github_url.replace("https://github.com/", "")}
-              </span>
-              <ExternalLink size={14} style={{ color: "#6B7280" }} />
-            </a>
-          )}
-
-          <Link
-            href="/app"
-            className="flex items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-medium transition-all"
-            style={{ borderColor: "rgba(255,255,255,0.05)", color: "#9CA3AF", background: "rgba(255,255,255,0.02)" }}
-            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.1)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.05)"; }}
-          >
-            <LayoutDashboard size={16} />
-            Back to Dashboard
-          </Link>
-        </motion.div>
-      </div>
-    </div>
-  );
-}
 
 // ── ErrorScreen ────────────────────────────────────────────────────────────────
 
